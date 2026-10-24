@@ -19,8 +19,9 @@ const VALID_CATEGORIES: ServiceCategory[] = [
 
 export interface CreateJobInput {
   category: ServiceCategory;
+  customCategoryName?: string;
   title: string;
-  description: string;
+  description?: string;
   urgency: JobUrgency;
   latitude: number;
   longitude: number;
@@ -33,21 +34,36 @@ export interface CreateJobInput {
   estimatedMaxPriceInr?: number;
   scheduledDate?: string;
   scheduledTimeSlot?: string;
+  photoUrls?: string[];
 }
+
+const VALID_URGENCIES: JobUrgency[] = ['standard', 'same_day', 'urgent', 'emergency'];
 
 export function validateCreateJob(input: CreateJobInput): ValidationResult<CreateJobInput> {
   const errors: Record<string, string> = {};
 
-  if (!VALID_CATEGORIES.includes(input.category)) {
+  const isPredefined = VALID_CATEGORIES.includes(input.category as (typeof VALID_CATEGORIES)[number]);
+  const isOther = input.category === 'other' || input.category === 'custom';
+
+  if (!isPredefined && !isOther) {
     errors.category = 'Invalid service category selected.';
   }
 
-  if (!input.title || input.title.trim().length < 5) {
-    errors.title = 'Title must be at least 5 characters.';
+  if (input.urgency && !VALID_URGENCIES.includes(input.urgency)) {
+    errors.urgency = 'Invalid urgency level selected.';
   }
 
-  if (!input.description || input.description.trim().length < 10) {
-    errors.description = 'Please describe the problem in at least 10 characters.';
+  if (isOther && (!input.customCategoryName || input.customCategoryName.trim().length < 2)) {
+    errors.customCategoryName = 'Please specify the custom service name (at least 2 characters).';
+  }
+
+  if (!input.title || input.title.trim().length < 3) {
+    errors.title = 'Title must be at least 3 characters.';
+  }
+
+  // Description is optional; if provided, must not be just whitespace
+  if (input.description !== undefined && input.description.length > 0 && input.description.trim().length === 0) {
+    errors.description = 'Description cannot be only whitespace.';
   }
 
   if (typeof input.latitude !== 'number' || input.latitude < 6 || input.latitude > 38) {

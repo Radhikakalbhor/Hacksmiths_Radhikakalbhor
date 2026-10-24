@@ -32,7 +32,7 @@ interface Job {
   category: string;
   title: string;
   description: string;
-  urgency: 'standard' | 'same_day' | 'emergency';
+  urgency: 'standard' | 'same_day' | 'urgent' | 'emergency';
   status: string;
   address_line: string;
   city: string;
@@ -566,7 +566,7 @@ function DashboardContent() {
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-gray-400" />
-                          <span>Urgency: {job.urgency}</span>
+                          <span>Urgency: {job.urgency === 'urgent' || job.urgency === 'same_day' ? 'Same Day' : job.urgency === 'emergency' ? 'Emergency' : 'Standard'}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
@@ -806,8 +806,8 @@ function DashboardContent() {
                             </span>
                             <h3 className="text-base font-bold text-[#152220] mt-1.5">{job.title}</h3>
                           </div>
-                          <Badge variant={job.urgency === 'emergency' ? 'amber' : 'neutral'}>
-                            {job.urgency}
+                          <Badge variant={job.urgency === 'emergency' ? 'amber' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'teal' : 'neutral'}>
+                            {job.urgency === 'urgent' || job.urgency === 'same_day' ? 'Same Day' : job.urgency === 'emergency' ? 'Emergency' : 'Standard'}
                           </Badge>
                         </div>
 

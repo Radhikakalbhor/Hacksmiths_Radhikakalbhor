@@ -17,6 +17,7 @@ export interface ServiceCategoryMeta {
   iconName: string;
   popularTasks: string[];
   typicalBenchmarkRangeInr: [number, number];
+  typicalDurationEstimate: string;
 }
 
 export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
@@ -28,6 +29,7 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Wrench',
     popularTasks: ['Tap leakage repair', 'Flush valve replacement', 'Drain blockage clearing', 'Geyser fitting'],
     typicalBenchmarkRangeInr: [250, 600],
+    typicalDurationEstimate: '1–2 hours',
   },
   {
     id: 'electrical',
@@ -37,6 +39,7 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Zap',
     popularTasks: ['Ceiling fan installation', 'Switchboard rewiring', 'Short circuit fix', 'MCB upgrade'],
     typicalBenchmarkRangeInr: [200, 550],
+    typicalDurationEstimate: '1–2 hours',
   },
   {
     id: 'cleaning',
@@ -46,6 +49,7 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Sparkles',
     popularTasks: ['Kitchen degreasing', 'Bathroom descaling', 'Full 2BHK deep clean', 'Sofa shampooing'],
     typicalBenchmarkRangeInr: [800, 2500],
+    typicalDurationEstimate: '3–5 hours',
   },
   {
     id: 'painting',
@@ -55,6 +59,7 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Paintbrush',
     popularTasks: ['Single room touch-up', 'Wall seepage treatment', 'Door/grille polishing', 'Full flat painting'],
     typicalBenchmarkRangeInr: [1200, 5000],
+    typicalDurationEstimate: '1–2 days',
   },
   {
     id: 'maid',
@@ -64,6 +69,7 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Home',
     popularTasks: ['Daily sweeping & mopping', 'Utensil washing', 'Emergency one-day helper', 'Deep dust clean'],
     typicalBenchmarkRangeInr: [300, 900],
+    typicalDurationEstimate: '2–4 hours',
   },
   {
     id: 'cooking',
@@ -73,6 +79,7 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Utensils',
     popularTasks: ['North/South Indian meals', 'Special event party food', 'Weekend meal prep', 'Daily healthy cooking'],
     typicalBenchmarkRangeInr: [400, 1200],
+    typicalDurationEstimate: '2–3 hours',
   },
   {
     id: 'carpentry',
@@ -82,6 +89,7 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Hammer',
     popularTasks: ['Door lock installation', 'Hinge repair', 'Modular wardrobe repair', 'Custom shelves'],
     typicalBenchmarkRangeInr: [300, 800],
+    typicalDurationEstimate: '1–3 hours',
   },
   {
     id: 'appliance_repair',
@@ -91,8 +99,27 @@ export const SERVICE_CATEGORIES: ServiceCategoryMeta[] = [
     iconName: 'Tv',
     popularTasks: ['AC filter deep clean & gas refill', 'Washing machine spin cycle fix', 'Fridge repair', 'RO filter service'],
     typicalBenchmarkRangeInr: [350, 1200],
+    typicalDurationEstimate: '1–3 hours',
   },
 ];
+
+export const OTHER_CUSTOM_CATEGORY: ServiceCategoryMeta = {
+  id: 'other',
+  name: 'Other / Custom Service',
+  hindiName: 'अन्य सेवा (Custom Service)',
+  description: 'AC installation, pet bathing, pest control, glasswork, or any unlisted household assistance.',
+  iconName: 'HelpCircle',
+  popularTasks: ['AC installation & gas charge', 'Pet grooming / bathing', 'Pest control treatment', 'Curtain & blind fitting'],
+  typicalBenchmarkRangeInr: [350, 1500],
+  typicalDurationEstimate: '1–3 hours',
+};
+
+export function getCategoryDurationEstimate(categoryId: string): string {
+  const match = SERVICE_CATEGORIES.find((c) => c.id === categoryId);
+  if (match) return match.typicalDurationEstimate;
+  if (categoryId === 'other') return OTHER_CUSTOM_CATEGORY.typicalDurationEstimate;
+  return 'typically 1–3 hours';
+}
 
 export const TRUST_PILLARS = [
   {

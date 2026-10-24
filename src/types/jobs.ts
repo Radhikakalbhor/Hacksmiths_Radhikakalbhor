@@ -3,7 +3,7 @@
  * Strict typing for job postings, statuses, and life-cycle transitions.
  */
 
-export type ServiceCategory =
+export type PredefinedServiceCategory =
   | 'plumbing'
   | 'electrical'
   | 'cleaning'
@@ -13,7 +13,17 @@ export type ServiceCategory =
   | 'carpentry'
   | 'appliance_repair';
 
+export type ServiceCategory = PredefinedServiceCategory | 'other' | (string & {});
+
 export type JobStatus =
+  | 'draft'
+  | 'posted'
+  | 'bidding_open'
+  | 'assigned'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled'
+  | 'disputed'
   | 'DRAFT'
   | 'POSTED'
   | 'BIDDING_OPEN'
@@ -25,7 +35,7 @@ export type JobStatus =
   | 'CANCELLED'
   | 'DISPUTED';
 
-export type JobUrgency = 'standard' | 'same_day' | 'emergency';
+export type JobUrgency = 'standard' | 'same_day' | 'urgent' | 'emergency';
 
 export interface GeoLocation {
   latitude: number;
@@ -49,8 +59,9 @@ export interface JobPost {
   id: string;
   customerId: string;
   category: ServiceCategory;
+  customCategoryName?: string;
   title: string;
-  description: string;
+  description?: string;
   urgency: JobUrgency;
   location: GeoLocation;
   estimatedBudgetInr?: number;
@@ -69,18 +80,26 @@ export interface JobPost {
  * Valid state transitions for a Job's life cycle.
  */
 export const VALID_JOB_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
+  draft: ['posted', 'cancelled', 'POSTED', 'CANCELLED'],
+  posted: ['bidding_open', 'cancelled', 'assigned', 'BIDDING_OPEN', 'CANCELLED', 'ASSIGNED'],
+  bidding_open: ['assigned', 'cancelled', 'ASSIGNED', 'CANCELLED'],
+  assigned: ['in_progress', 'cancelled', 'disputed', 'IN_PROGRESS', 'CANCELLED', 'DISPUTED', 'OTP_START_VERIFIED'],
+  in_progress: ['completed', 'disputed', 'COMPLETED', 'DISPUTED'],
+  completed: [],
+  cancelled: [],
+  disputed: ['completed', 'cancelled', 'COMPLETED', 'CANCELLED'],
   DRAFT: ['POSTED', 'CANCELLED'],
-  POSTED: ['BIDDING_OPEN', 'CANCELLED'],
-  BIDDING_OPEN: ['ASSIGNED', 'CANCELLED'],
-  ASSIGNED: ['OTP_START_VERIFIED', 'CANCELLED', 'DISPUTED'],
+  POSTED: ['BIDDING_OPEN', 'CANCELLED', 'ASSIGNED', 'assigned'],
+  BIDDING_OPEN: ['ASSIGNED', 'CANCELLED', 'assigned'],
+  ASSIGNED: ['OTP_START_VERIFIED', 'CANCELLED', 'DISPUTED', 'IN_PROGRESS', 'in_progress'],
   OTP_START_VERIFIED: ['IN_PROGRESS'],
-  IN_PROGRESS: ['OTP_COMPLETION_VERIFIED', 'DISPUTED'],
+  IN_PROGRESS: ['OTP_COMPLETION_VERIFIED', 'DISPUTED', 'COMPLETED', 'completed'],
   OTP_COMPLETION_VERIFIED: ['COMPLETED'],
   COMPLETED: [],
   CANCELLED: [],
   DISPUTED: ['COMPLETED', 'CANCELLED'],
-} as const;
+};
 
 export function canTransitionJob(from: JobStatus, to: JobStatus): boolean {
-  return VALID_JOB_TRANSITIONS[from]?.includes(to) ?? false;
+  return (VALID_JOB_TRANSITIONS[from] as readonly JobStatus[] | undefined)?.includes(to) ?? false;
 }

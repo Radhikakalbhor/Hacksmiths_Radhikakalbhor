@@ -22,14 +22,20 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { SERVICE_CATEGORIES } from '@/lib/config/constants';
+import {
+  SERVICE_CATEGORIES,
+  OTHER_CUSTOM_CATEGORY,
+  getCategoryDurationEstimate,
+} from '@/lib/config/constants';
 import { ServiceCategory, JobUrgency } from '@/types/jobs';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { reverseGeocodeCoordinates } from '@/lib/utils/geocoding';
 
 const DRAFT_STORAGE_KEY = 'sahayak_job_draft_v1';
 
 interface DraftData {
   category: ServiceCategory;
+  customCategoryName?: string;
   title: string;
   description: string;
   urgency: JobUrgency;
@@ -40,6 +46,7 @@ interface DraftData {
   latitude: number | null;
   longitude: number | null;
   estimatedBudgetInr: string;
+  isAutoTitle?: boolean;
 }
 
 function PostJobForm() {
@@ -47,7 +54,7 @@ function PostJobForm() {
   const urlCategory = searchParams.get('category') as ServiceCategory | null;
 
   // Verify valid category fallback
-  const validCategoryIds = SERVICE_CATEGORIES.map((c) => c.id);
+  const validCategoryIds = [...SERVICE_CATEGORIES.map((c) => c.id), 'other'];
 
   // Lazy draft loader helper
   const getInitialDraft = (): Partial<DraftData> => {
@@ -71,17 +78,54 @@ function PostJobForm() {
     return 'plumbing';
   });
 
-  const [title, setTitle] = useState(() => initialDraft.title || '');
+  const [customCategoryName, setCustomCategoryName] = useState(() => initialDraft.customCategoryName || '');
+
+  // Track whether the title was auto-generated or manually edited
+  const [isAutoTitle, setIsAutoTitle] = useState(() => {
+    if (initialDraft.isAutoTitle !== undefined) return initialDraft.isAutoTitle;
+    return !initialDraft.title;
+  });
+
+  const [title, setTitle] = useState(() => {
+    if (initialDraft.title) return initialDraft.title;
+    const catMeta = SERVICE_CATEGORIES.find((c) => c.id === 'plumbing');
+    return catMeta ? catMeta.name : 'Plumbing';
+  });
+
   const [description, setDescription] = useState(() => initialDraft.description || '');
-  const [urgency, setUrgency] = useState<JobUrgency>(() => initialDraft.urgency || 'standard');
+  const [urgency, setUrgency] = useState<JobUrgency>(() => (initialDraft.urgency === 'urgent' ? 'same_day' : initialDraft.urgency) || 'standard');
   const [addressLine, setAddressLine] = useState(() => initialDraft.addressLine || '');
   const [landmark, setLandmark] = useState(() => initialDraft.landmark || '');
-  const [city, setCity] = useState(() => initialDraft.city || 'Delhi NCR');
-  const [pincode, setPincode] = useState(() => initialDraft.pincode || '110001');
+  const [city, setCity] = useState(() => initialDraft.city || 'Mumbai');
+  const [pincode, setPincode] = useState(() => initialDraft.pincode || '400050');
   const [latitude, setLatitude] = useState<number | null>(() => initialDraft.latitude ?? null);
   const [longitude, setLongitude] = useState<number | null>(() => initialDraft.longitude ?? null);
   const [showManualCoords, setShowManualCoords] = useState(false);
+  const [locationStatusMsg, setLocationStatusMsg] = useState<string | null>(null);
   const [estimatedBudgetInr, setEstimatedBudgetInr] = useState(() => initialDraft.estimatedBudgetInr || '');
+
+  // Handler for category selection with automatic title update
+  const handleCategorySelect = (selectedCatId: ServiceCategory) => {
+    setCategory(selectedCatId);
+    if (isAutoTitle) {
+      if (selectedCatId === 'other') {
+        setTitle(customCategoryName.trim() || 'Custom Service');
+      } else {
+        const catMeta = SERVICE_CATEGORIES.find((c) => c.id === selectedCatId);
+        if (catMeta) {
+          setTitle(catMeta.name);
+        }
+      }
+    }
+  };
+
+  // Handler for custom category name change
+  const handleCustomCategoryNameChange = (val: string) => {
+    setCustomCategoryName(val);
+    if (isAutoTitle && category === 'other') {
+      setTitle(val.trim() || 'Custom Service');
+    }
+  };
 
   // Local Micro-Market Pricing Benchmark
   const [benchmark, setBenchmark] = useState<{
@@ -101,11 +145,16 @@ function PostJobForm() {
         const supabase = getSupabaseBrowserClient();
         if (!supabase) return;
 
+        const effectiveCategoryQuery =
+          category === 'other'
+            ? 'other'
+            : category.toLowerCase();
+
         const cityPrefix = city.split(' ')[0] || city;
         const { data: areaData } = await supabase
           .from('price_benchmarks')
           .select('min_price_inr, median_price_inr, max_price_inr, micro_market_area')
-          .eq('category', category.toLowerCase())
+          .eq('category', effectiveCategoryQuery)
           .ilike('city', `%${cityPrefix}%`)
           .order('sample_size', { ascending: false })
           .limit(1)
@@ -124,7 +173,7 @@ function PostJobForm() {
         const { data: genData } = await supabase
           .from('price_benchmarks')
           .select('min_price_inr, median_price_inr, max_price_inr, micro_market_area')
-          .eq('category', category.toLowerCase())
+          .eq('category', effectiveCategoryQuery)
           .order('sample_size', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -270,6 +319,7 @@ function PostJobForm() {
     try {
       const draft: DraftData = {
         category,
+        customCategoryName,
         title,
         description,
         urgency,
@@ -280,6 +330,7 @@ function PostJobForm() {
         latitude,
         longitude,
         estimatedBudgetInr,
+        isAutoTitle,
       };
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
     } catch {
@@ -287,6 +338,7 @@ function PostJobForm() {
     }
   }, [
     category,
+    customCategoryName,
     title,
     description,
     urgency,
@@ -297,12 +349,16 @@ function PostJobForm() {
     latitude,
     longitude,
     estimatedBudgetInr,
+    isAutoTitle,
   ]);
 
   // Selected category benchmark lookup
-  const currentCategoryMeta = SERVICE_CATEGORIES.find((c) => c.id === category);
+  const currentCategoryMeta =
+    category === 'other'
+      ? OTHER_CUSTOM_CATEGORY
+      : SERVICE_CATEGORIES.find((c) => c.id === category);
 
-  // GPS Location Request
+  // GPS Location Request with human-readable address reverse geocoding
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       setErrorMsg('Geolocation is not supported by your browser. Please enter your address manually.');
@@ -311,19 +367,39 @@ function PostJobForm() {
 
     setLocating(true);
     setErrorMsg(null);
+    setLocationStatusMsg(null);
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLatitude(pos.coords.latitude);
-        setLongitude(pos.coords.longitude);
-        setLocating(false);
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLatitude(lat);
+        setLongitude(lng);
+
+        // Perform reverse geocoding to human-readable address
+        try {
+          const geocoded = await reverseGeocodeCoordinates(lat, lng);
+          if (geocoded) {
+            if (geocoded.addressLine) setAddressLine(geocoded.addressLine);
+            if (geocoded.landmark) setLandmark(geocoded.landmark);
+            if (geocoded.city) setCity(geocoded.city);
+            if (geocoded.pincode) setPincode(geocoded.pincode);
+            setLocationStatusMsg('Address found from GPS');
+          } else {
+            setLocationStatusMsg('Location detected');
+          }
+        } catch {
+          setLocationStatusMsg('Location detected');
+        } finally {
+          setLocating(false);
+        }
       },
       (err) => {
         setLocating(false);
         setShowManualCoords(true);
-        setErrorMsg(`Unable to retrieve GPS location (${err.message}). You can enter coordinates manually below.`);
+        setErrorMsg(`Unable to retrieve GPS location (${err.message}). You can enter your address and coordinates manually below.`);
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      { timeout: 12000, enableHighAccuracy: true }
     );
   };
 
@@ -369,6 +445,7 @@ function PostJobForm() {
       try {
         const draft: DraftData = {
           category,
+          customCategoryName,
           title,
           description,
           urgency,
@@ -379,6 +456,7 @@ function PostJobForm() {
           latitude,
           longitude,
           estimatedBudgetInr,
+          isAutoTitle,
         };
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
       } catch {
@@ -396,19 +474,26 @@ function PostJobForm() {
       return;
     }
 
+    // Custom Category Validation
+    if (category === 'other' && (!customCategoryName.trim() || customCategoryName.trim().length < 2)) {
+      setErrorMsg('Please specify the custom service name (e.g. AC Repair, Pet Bathing).');
+      return;
+    }
+
     // Strict Input Validation
-    if (!title.trim() || title.trim().length < 5) {
-      setErrorMsg('Please provide a specific job title (at least 5 characters).');
+    if (!title.trim() || title.trim().length < 3) {
+      setErrorMsg('Please provide a specific job title (at least 3 characters).');
       return;
     }
 
-    if (!description.trim() || description.trim().length < 10) {
-      setErrorMsg('Please describe the problem in detail (at least 10 characters).');
+    // Description is now OPTIONAL. Only validate if user typed something but it's only whitespace
+    if (description.length > 0 && description.trim().length === 0) {
+      setErrorMsg('Problem description cannot be only whitespace.');
       return;
     }
 
-    if (!addressLine.trim() || addressLine.trim().length < 5) {
-      setErrorMsg('Please enter your complete street address (at least 5 characters).');
+    if (!addressLine.trim() || addressLine.trim().length < 3) {
+      setErrorMsg('Please enter your complete street address (at least 3 characters).');
       return;
     }
 
@@ -439,8 +524,9 @@ function PostJobForm() {
     try {
       const payload = {
         category,
+        customCategoryName: category === 'other' ? customCategoryName.trim() : undefined,
         title: title.trim(),
-        description: description.trim(),
+        description: description.trim() || undefined,
         urgency,
         latitude,
         longitude,
@@ -673,14 +759,14 @@ function PostJobForm() {
           <label className="block text-xs font-bold uppercase tracking-wider text-[#152220]">
             1. Select Service Category <span className="text-red-500">*</span>
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-2.5">
             {SERVICE_CATEGORIES.map((cat) => {
               const isSelected = category === cat.id;
               return (
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setCategory(cat.id)}
+                  onClick={() => handleCategorySelect(cat.id)}
                   className={`p-3 rounded-xl border text-left transition-all ${
                     isSelected
                       ? 'bg-[#EBF4F3] border-[#0D4A52] ring-1 ring-[#0D4A52]'
@@ -694,15 +780,58 @@ function PostJobForm() {
                 </button>
               );
             })}
+
+            {/* Other / Custom Service Button */}
+            <button
+              type="button"
+              onClick={() => handleCategorySelect('other')}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                category === 'other'
+                  ? 'bg-[#EBF4F3] border-[#0D4A52] ring-1 ring-[#0D4A52]'
+                  : 'bg-[#FAF9F5] border-[#E5DFD2] hover:bg-white'
+              }`}
+            >
+              <span className="text-xs font-bold block text-[#152220]">{OTHER_CUSTOM_CATEGORY.name}</span>
+              <span className="text-[10px] text-[#217E66] font-medium block truncate">
+                {OTHER_CUSTOM_CATEGORY.hindiName}
+              </span>
+            </button>
           </div>
 
-          {/* Benchmark Guidance Pill */}
+          {/* Custom Service Input Field when 'other' is selected */}
+          {category === 'other' && (
+            <div className="p-3.5 bg-[#FAF9F5] border border-[#BCE5DA] rounded-xl space-y-2 animate-in fade-in">
+              <label className="block text-xs font-semibold text-[#152220]">
+                Specify Unlisted / Custom Service <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={customCategoryName}
+                onChange={(e) => handleCustomCategoryNameChange(e.target.value)}
+                placeholder="e.g. AC Installation, Pet Bathing, Pest Control, Curtain Fitting"
+                className="w-full p-2.5 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none bg-white"
+              />
+              <p className="text-[11px] text-[#576563]">
+                Your custom service title will be shown to nearby skilled professionals who offer general or specialized assistance.
+              </p>
+            </div>
+          )}
+
+          {/* Benchmark & Indicative Duration Guidance Pill */}
           {currentCategoryMeta && (
-            <div className="mt-2 p-2.5 rounded-lg bg-[#FAF9F5] border border-[#E5DFD2] flex items-center justify-between text-[11px] text-[#576563]">
-              <span>Indicative Local Benchmark Rate:</span>
-              <span className="font-bold text-[#0D4A52]">
+            <div className="mt-2 p-2.5 rounded-lg bg-[#FAF9F5] border border-[#E5DFD2] flex flex-wrap items-center justify-between gap-1 text-[11px] text-[#576563]">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#217E66]" />
+                <span>Indicative Local Rate &amp; Duration:</span>
+              </span>
+              <span className="font-semibold text-[#0D4A52]">
                 ₹{currentCategoryMeta.typicalBenchmarkRangeInr[0]} – ₹
-                {currentCategoryMeta.typicalBenchmarkRangeInr[1]}
+                {currentCategoryMeta.typicalBenchmarkRangeInr[1]} •{' '}
+                <span className="text-[#217E66]">
+                  typically {getCategoryDurationEstimate(category)}
+                </span>{' '}
+                <span className="text-[10px] font-normal text-[#83928E]">(indicative estimate)</span>
               </span>
             </div>
           )}
@@ -715,14 +844,24 @@ function PostJobForm() {
           </label>
 
           <div>
-            <label className="block text-xs font-semibold text-[#152220] mb-1">
-              Job Title / Brief Summary
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-[#152220]">
+                Job Title / Brief Summary <span className="text-red-500">*</span>
+              </label>
+              {isAutoTitle && (
+                <span className="text-[10px] text-[#217E66] font-medium bg-[#EDF7F4] px-1.5 py-0.5 rounded">
+                  Auto-filled from category
+                </span>
+              )}
+            </div>
             <input
               type="text"
               required
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setIsAutoTitle(false);
+              }}
               placeholder="e.g. Bathroom tap continuous leakage and spindle repair"
               className="w-full p-3 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none"
             />
@@ -730,14 +869,13 @@ function PostJobForm() {
 
           <div>
             <label className="block text-xs font-semibold text-[#152220] mb-1">
-              Detailed Problem Description
+              Detailed Problem Description <span className="text-[#83928E] font-normal">(Optional)</span>
             </label>
             <textarea
-              required
-              rows={4}
+              rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Please describe the issue, equipment brand/model, whether spare parts are required, and when you need it serviced..."
+              placeholder="Optional: Provide extra context, brand/model, specific requirements, or preferred timing..."
               className="w-full p-3 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none resize-none"
             />
           </div>
@@ -845,11 +983,11 @@ function PostJobForm() {
           </div>
 
           {latitude && longitude ? (
-            <div className="flex items-center justify-between bg-[#EBF4F3] p-2.5 rounded-xl border border-[#BCE5DA] text-[11px] text-[#217E66] font-medium">
+            <div className="flex items-center justify-between bg-[#EBF4F3] p-2.5 rounded-xl border border-[#BCE5DA] text-[11px] text-[#217E66] font-medium animate-in fade-in">
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                 <span>
-                  Coordinates locked ({latitude.toFixed(4)}, {longitude.toFixed(4)}) for PostGIS spatial dispatch.
+                  {locationStatusMsg || 'Address found'}: {city || 'Location confirmed'}
                 </span>
               </span>
               <button
@@ -857,14 +995,14 @@ function PostJobForm() {
                 onClick={() => setShowManualCoords(!showManualCoords)}
                 className="text-xs text-[#0D4A52] underline hover:text-[#217E66]"
               >
-                {showManualCoords ? 'Hide Coordinates' : 'Edit'}
+                {showManualCoords ? 'Hide Coordinates' : 'Edit Coordinates'}
               </button>
             </div>
           ) : (
             <div className="flex items-center justify-between bg-[#F8F6F0] p-2.5 rounded-xl border border-[#E5DFD2] text-[11px] text-[#655D50]">
               <span className="flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-[#D97706] shrink-0" />
-                <span>Exact GPS coordinates required for worker dispatch.</span>
+                <span>Click "Use Current GPS Location" or enter your address.</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -873,7 +1011,7 @@ function PostJobForm() {
                   disabled={locating}
                   className="text-[#0D4A52] font-semibold underline hover:text-[#217E66] cursor-pointer"
                 >
-                  {locating ? 'Locating...' : 'Lock Location'}
+                  {locating ? 'Locating...' : 'Detect Address'}
                 </button>
                 <span className="text-[#B5AE9E]">|</span>
                 <button
@@ -896,7 +1034,7 @@ function PostJobForm() {
                   step="any"
                   value={latitude ?? ''}
                   onChange={(e) => setLatitude(e.target.value ? parseFloat(e.target.value) : null)}
-                  placeholder="e.g. 28.6139"
+                  placeholder="e.g. 19.0760"
                   className="w-full p-2 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] outline-none bg-white"
                 />
               </div>
@@ -907,7 +1045,7 @@ function PostJobForm() {
                   step="any"
                   value={longitude ?? ''}
                   onChange={(e) => setLongitude(e.target.value ? parseFloat(e.target.value) : null)}
-                  placeholder="e.g. 77.2090"
+                  placeholder="e.g. 72.8777"
                   className="w-full p-2 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] outline-none bg-white"
                 />
               </div>
@@ -939,7 +1077,8 @@ function PostJobForm() {
                   <span className="text-[#576563] text-[11px] truncate">
                     Fair Market ({benchmark.area}):{' '}
                     <strong className="text-[#152220]">₹{benchmark.min}–₹{benchmark.max}</strong>
-                    {' '}(Typical: <strong className="text-[#217E66]">₹{benchmark.median}</strong>)
+                    {' '}• typically <strong className="text-[#217E66]">{getCategoryDurationEstimate(category)}</strong>{' '}
+                    <span className="text-[10px] text-[#83928E]">(indicative estimate)</span>
                   </span>
                 </div>
                 {!estimatedBudgetInr && (

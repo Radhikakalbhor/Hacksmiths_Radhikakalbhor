@@ -68,6 +68,6 @@ describe('Job Lifecycle State Machine', () => {
     assert.equal(payload.service_location, 'POINT(77.209 28.6139)');
     assert.equal(payload.location_point, 'POINT(77.209 28.6139)');
     assert.equal(payload.customer_id, '00000000-0000-0000-0000-000000000001');
-    assert.equal(payload.status, 'BIDDING_OPEN');
+    assert.equal(payload.status, 'posted');
   });
 });

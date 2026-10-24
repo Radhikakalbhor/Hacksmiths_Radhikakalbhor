@@ -46,7 +46,7 @@ export async function GET(
 
     const isCustomerOwner = job.customer_id === user.id;
     const isAssignedWorker = job.selected_worker_id === user.id;
-    const isOpenForBidding = ['POSTED', 'BIDDING_OPEN'].includes(job.status);
+    const isOpenForBidding = ['POSTED', 'BIDDING_OPEN', 'posted', 'bidding_open'].includes(job.status);
     const isWorker = profile.role === 'worker';
     const isAdmin = profile.role === 'admin';
 
@@ -92,7 +92,20 @@ export async function GET(
       });
     }
 
-    // 2. If assigned worker: Include full job and their winning bid
+    // Helper to sanitize sensitive customer fields (like OTP) for workers/public
+    const sanitizeJobForNonCustomer = <T extends Record<string, unknown>>(rawJob: T): T => {
+      const jobWithAi = rawJob as { ai_details?: unknown };
+      if (!jobWithAi.ai_details || typeof jobWithAi.ai_details !== 'object') return rawJob;
+      const details = { ...(jobWithAi.ai_details as Record<string, unknown>) };
+      if (details.booking && typeof details.booking === 'object') {
+        const bookingCopy = { ...(details.booking as Record<string, unknown>) };
+        delete bookingCopy.customerOtp;
+        details.booking = bookingCopy;
+      }
+      return { ...rawJob, ai_details: details };
+    };
+
+    // 2. If assigned worker: Include sanitized job and winning bid
     if (isAssignedWorker) {
       const { data: winningBid } = await supabase!
         .from('bids')
@@ -102,7 +115,7 @@ export async function GET(
         .maybeSingle();
 
       return apiSuccess({
-        job,
+        job: sanitizeJobForNonCustomer(job),
         myBid: winningBid,
         viewerRole: 'assigned_worker',
       });
@@ -118,7 +131,7 @@ export async function GET(
       .maybeSingle();
 
     const sanitizedJob = {
-      ...job,
+      ...sanitizeJobForNonCustomer(job),
       address_line: `${job.city}, ${job.pincode} (Exact address revealed upon assignment)`,
     };
 

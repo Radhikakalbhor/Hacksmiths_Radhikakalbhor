@@ -11,6 +11,7 @@ import {
   validateCounterOffer,
 } from '@/lib/validations/jobs';
 import { validateIndianPhoneNumber } from '@/lib/validations/auth';
+import { JobUrgency } from '@/types/jobs';
 
 describe('Job Validation', () => {
   it('should accept valid job input', () => {
@@ -52,10 +53,10 @@ describe('Job Validation', () => {
     assert.ok(result.errors?.category);
   });
 
-  it('should reject titles shorter than 5 characters', () => {
+  it('should reject titles shorter than 3 characters', () => {
     const result = validateCreateJob({
       category: 'plumbing',
-      title: 'Fix',
+      title: 'Fi',
       description: 'A detailed description of the leaking pipe problem.',
       urgency: 'standard',
       latitude: 28.5,
@@ -69,11 +70,10 @@ describe('Job Validation', () => {
     assert.ok(result.errors?.title);
   });
 
-  it('should reject descriptions shorter than 10 characters', () => {
+  it('should accept job input when description is omitted (optional description)', () => {
     const result = validateCreateJob({
       category: 'electrical',
       title: 'Fan Installation',
-      description: 'Too short',
       urgency: 'standard',
       latitude: 28.5,
       longitude: 77.0,
@@ -82,8 +82,43 @@ describe('Job Validation', () => {
       pincode: '110075',
     });
 
+    assert.equal(result.success, true);
+    assert.equal(result.data?.title, 'Fan Installation');
+  });
+
+  it('should accept other/custom service category with valid customCategoryName', () => {
+    const result = validateCreateJob({
+      category: 'other',
+      customCategoryName: 'Pet Bathing & Grooming',
+      title: 'Pet Bathing & Grooming',
+      urgency: 'same_day',
+      latitude: 19.076,
+      longitude: 72.8777,
+      addressLine: 'Bandra West, Hill Road',
+      city: 'Mumbai',
+      pincode: '400050',
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.data?.category, 'other');
+    assert.equal(result.data?.customCategoryName, 'Pet Bathing & Grooming');
+  });
+
+  it('should reject other/custom service category without customCategoryName', () => {
+    const result = validateCreateJob({
+      category: 'other',
+      customCategoryName: '',
+      title: 'Custom Job',
+      urgency: 'standard',
+      latitude: 19.076,
+      longitude: 72.8777,
+      addressLine: 'Bandra West',
+      city: 'Mumbai',
+      pincode: '400050',
+    });
+
     assert.equal(result.success, false);
-    assert.ok(result.errors?.description);
+    assert.ok(result.errors?.customCategoryName);
   });
 
   it('should reject geographic coordinates outside India bounds', () => {
@@ -152,6 +187,39 @@ describe('Job Validation', () => {
 
     assert.equal(result.success, false);
     assert.ok(result.errors?.estimatedMaxPriceInr);
+  });
+
+  it('should accept all valid urgency levels (standard, same_day, urgent, emergency)', () => {
+    const urgencies: JobUrgency[] = ['standard', 'same_day', 'urgent', 'emergency'];
+    for (const urg of urgencies) {
+      const result = validateCreateJob({
+        category: 'plumbing',
+        title: 'Valid Job Title',
+        urgency: urg,
+        latitude: 19.076,
+        longitude: 72.8777,
+        addressLine: 'Hill Road, Bandra',
+        city: 'Mumbai',
+        pincode: '400050',
+      });
+      assert.equal(result.success, true, `Urgency ${urg} should be valid`);
+      assert.equal(result.data?.urgency, urg);
+    }
+  });
+
+  it('should reject invalid urgency levels', () => {
+    const result = validateCreateJob({
+      category: 'plumbing',
+      title: 'Valid Job Title',
+      urgency: 'overnight_rush' as unknown as JobUrgency,
+      latitude: 19.076,
+      longitude: 72.8777,
+      addressLine: 'Hill Road, Bandra',
+      city: 'Mumbai',
+      pincode: '400050',
+    });
+    assert.equal(result.success, false);
+    assert.ok(result.errors?.urgency);
   });
 });
 

@@ -14,8 +14,16 @@ export type Json =
 
 export type UserRole = 'customer' | 'worker' | 'admin';
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended';
-export type JobUrgency = 'standard' | 'same_day' | 'emergency';
+export type JobUrgency = 'standard' | 'same_day' | 'urgent' | 'emergency';
 export type JobStatus =
+  | 'draft'
+  | 'posted'
+  | 'bidding_open'
+  | 'assigned'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled'
+  | 'disputed'
   | 'DRAFT'
   | 'POSTED'
   | 'BIDDING_OPEN'
@@ -161,6 +169,8 @@ export interface Database {
           accepted_price_inr: number | null;
           scheduled_date: string | null;
           scheduled_time_slot: string | null;
+          photo_urls?: string[] | null;
+          ai_details: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -185,6 +195,8 @@ export interface Database {
           accepted_price_inr?: number | null;
           scheduled_date?: string | null;
           scheduled_time_slot?: string | null;
+          photo_urls?: string[] | null;
+          ai_details?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -202,11 +214,13 @@ export interface Database {
           landmark?: string | null;
           city?: string;
           pincode?: string;
+          photo_urls?: string[] | null;
           estimated_min_price_inr?: number | null;
           estimated_max_price_inr?: number | null;
           accepted_price_inr?: number | null;
           scheduled_date?: string | null;
           scheduled_time_slot?: string | null;
+          ai_details?: Json | null;
           updated_at?: string;
         };
         Relationships: [
@@ -387,6 +401,7 @@ export interface Database {
         Row: {
           id: string;
           job_id: string;
+          purpose: string | null;
           verification_type: VerificationType;
           otp_hash: string;
           salt: string;
@@ -399,6 +414,7 @@ export interface Database {
         Insert: {
           id?: string;
           job_id: string;
+          purpose?: string | null;
           verification_type: VerificationType;
           otp_hash: string;
           salt: string;
@@ -409,6 +425,7 @@ export interface Database {
           created_at?: string;
         };
         Update: {
+          purpose?: string | null;
           attempts?: number;
           verified_at?: string | null;
         };
