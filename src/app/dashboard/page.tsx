@@ -22,6 +22,9 @@ import {
   ShieldCheck,
   RefreshCw,
   LogOut,
+  Star,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 
 interface Job {
@@ -67,6 +70,14 @@ interface Bid {
     avatar_url: string | null;
     primary_city: string;
   };
+  fair_price_evaluation?: 'BELOW_AVERAGE' | 'FAIR_MARKET' | 'ABOVE_AVERAGE' | null;
+  fair_price_label?: 'Below Range' | 'Fair Price' | 'Above Range' | 'Benchmark unavailable';
+  is_best_match?: boolean;
+  recommendation_reason?: string | null;
+  match_score?: number;
+  worker_distance_km?: number | null;
+  worker_review_count?: number;
+  worker_average_rating?: number | null;
 }
 
 function DashboardContent() {
@@ -82,6 +93,16 @@ function DashboardContent() {
   const [myJobs, setMyJobs] = useState<Job[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [selectedJobBids, setSelectedJobBids] = useState<{ [jobId: string]: Bid[] }>({});
+  const [jobBenchmarks, setJobBenchmarks] = useState<{
+    [jobId: string]: {
+      minPriceInr: number;
+      medianPriceInr: number;
+      maxPriceInr: number;
+      category: string;
+      city: string;
+      microMarketArea: string;
+    } | null;
+  }>({});
   const [loadingBidsForJob, setLoadingBidsForJob] = useState<string | null>(null);
   const [counterInput, setCounterInput] = useState<{ [bidId: string]: { amount: string; message: string } }>({});
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -231,6 +252,12 @@ function DashboardContent() {
           ...prev,
           [jobId]: json.data.bids ?? [],
         }));
+        if (json.data.benchmark) {
+          setJobBenchmarks((prev) => ({
+            ...prev,
+            [jobId]: json.data.benchmark,
+          }));
+        }
       } else {
         setActionError(json.error || 'Failed to load bids for this job.');
       }
@@ -584,6 +611,29 @@ function DashboardContent() {
                             </span>
                           </h4>
 
+                          {/* "You Saved ₹X" banner when job has accepted bid */}
+                          {(() => {
+                            const bm = jobBenchmarks[job.id];
+                            const acceptedAmount = job.accepted_price_inr;
+                            if (bm && typeof bm.medianPriceInr === 'number' && acceptedAmount && bm.medianPriceInr > acceptedAmount) {
+                              const savings = bm.medianPriceInr - acceptedAmount;
+                              return (
+                                <div className="p-3 bg-gradient-to-r from-emerald-50 to-[#EBF4F3] rounded-xl border border-emerald-200 text-xs flex items-center gap-2.5">
+                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  <div>
+                                    <span className="font-extrabold text-sm text-[#0D4A52]">
+                                      You Saved ₹{savings.toLocaleString('en-IN')}!
+                                    </span>
+                                    <p className="text-[11px] text-[#576563]">
+                                      Compared to the local median benchmark of ₹{bm.medianPriceInr.toLocaleString('en-IN')} for {job.category} in {bm.microMarketArea || bm.city}. (Based on local price benchmarks. Not a guaranteed market saving.)
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+
                           {bids.length === 0 ? (
                             <div className="text-center py-6 text-xs text-[#576563]">
                               No bids have been submitted yet for this job. Nearby verified workers are notified.
@@ -599,17 +649,42 @@ function DashboardContent() {
                                   <div
                                     key={bid.id}
                                     className={`p-4 rounded-lg border bg-white space-y-3 ${
-                                      isAccepted
+                                      bid.is_best_match
+                                        ? 'border-emerald-300 ring-2 ring-emerald-200 bg-emerald-50/10'
+                                        : isAccepted
                                         ? 'border-emerald-300 ring-2 ring-emerald-100'
                                         : 'border-gray-200'
                                     }`}
                                   >
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                      <div className="space-y-0.5">
-                                        <div className="flex items-center gap-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
                                           <span className="font-bold text-sm text-[#152220]">
                                             {bid.worker?.full_name || `Worker (${bid.worker_id.slice(0, 8)})`}
                                           </span>
+                                          {bid.is_best_match && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm">
+                                              <Sparkles className="w-3 h-3 text-amber-300" />
+                                              <span>Best Match</span>
+                                            </span>
+                                          )}
+                                          <Badge
+                                            variant={
+                                              bid.fair_price_label === 'Below Range'
+                                                ? 'teal'
+                                                : bid.fair_price_label === 'Fair Price'
+                                                ? 'green'
+                                                : bid.fair_price_label === 'Above Range'
+                                                ? 'amber'
+                                                : 'neutral'
+                                            }
+                                            className="text-[10px] py-0.5"
+                                          >
+                                            {bid.fair_price_label === 'Below Range' && <TrendingDown className="w-3 h-3 inline mr-0.5" />}
+                                            {bid.fair_price_label === 'Fair Price' && <CheckCircle2 className="w-3 h-3 inline mr-0.5" />}
+                                            {bid.fair_price_label === 'Above Range' && <TrendingUp className="w-3 h-3 inline mr-0.5" />}
+                                            <span>{bid.fair_price_label || 'Benchmark unavailable'}</span>
+                                          </Badge>
                                           <Badge
                                             variant={
                                               isAccepted
@@ -622,7 +697,8 @@ function DashboardContent() {
                                             {bid.status}
                                           </Badge>
                                         </div>
-                                        <div className="text-xs text-[#576563] flex items-center gap-3">
+
+                                        <div className="text-xs text-[#576563] flex items-center gap-2 flex-wrap">
                                           <span>Labor: ₹{bid.labor_cost_inr}</span>
                                           <span>•</span>
                                           <span>Materials: ₹{bid.materials_estimate_inr}</span>
@@ -632,7 +708,35 @@ function DashboardContent() {
                                               <span>Visit Fee: ₹{bid.visitation_fee_inr}</span>
                                             </>
                                           )}
+                                          <span>•</span>
+                                          {bid.worker_distance_km ? (
+                                            <span className="flex items-center gap-0.5 text-teal-700 font-medium">
+                                              <MapPin className="w-3 h-3" />
+                                              <span>{bid.worker_distance_km} km away</span>
+                                            </span>
+                                          ) : (
+                                            <span>{bid.worker?.primary_city || 'Local area'}</span>
+                                          )}
+                                          <span>•</span>
+                                          {bid.worker_review_count && bid.worker_review_count > 0 ? (
+                                            <span className="flex items-center gap-0.5 text-amber-700 font-semibold">
+                                              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                                              <span>{bid.worker_average_rating?.toFixed(1)} ({bid.worker_review_count})</span>
+                                            </span>
+                                          ) : (
+                                            <span className="flex items-center gap-0.5 text-gray-400">
+                                              <Star className="w-3 h-3" />
+                                              <span>Not rated yet</span>
+                                            </span>
+                                          )}
                                         </div>
+
+                                        {bid.is_best_match && bid.recommendation_reason && (
+                                          <div className="text-[11px] font-medium text-emerald-900 bg-emerald-50/90 p-2 rounded-lg border border-emerald-200 flex items-center gap-1.5 mt-1">
+                                            <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                            <span><strong>Recommended:</strong> {bid.recommendation_reason}</span>
+                                          </div>
+                                        )}
                                       </div>
 
                                       <div className="flex items-center gap-3">

@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/auth/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { PricingService } from '@/lib/services/pricing.service';
 
 export async function GET(
   request: NextRequest,
@@ -85,9 +86,35 @@ export async function GET(
         .eq('job_id', jobId)
         .order('offered_amount_inr', { ascending: true });
 
+      // Fetch matching price benchmark for locality
+      const benchmark = await PricingService.fetchBenchmarkForArea(
+        supabase!,
+        job.category,
+        job.city,
+        job.address_line
+      );
+
+      // Fetch existing customer review for this job
+      const { data: review } = await supabase!
+        .from('reviews')
+        .select('*')
+        .eq('job_id', jobId)
+        .maybeSingle();
+
       return apiSuccess({
         job,
         bids: bids ?? [],
+        benchmark: benchmark
+          ? {
+              category: benchmark.category,
+              city: benchmark.city,
+              microMarketArea: benchmark.micro_market_area,
+              minPriceInr: benchmark.min_price_inr,
+              medianPriceInr: benchmark.median_price_inr,
+              maxPriceInr: benchmark.max_price_inr,
+            }
+          : null,
+        review: review ?? null,
         viewerRole: 'customer',
       });
     }

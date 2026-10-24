@@ -8,7 +8,7 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireRole, requireAuth } from '@/lib/auth/server';
 import { validateCreateBid } from '@/lib/validations/jobs';
 import { JobsService } from '@/lib/services/jobs.service';
-import { PricingService } from '@/lib/services/pricing.service';
+import { PricingService, getFairPriceLabel } from '@/lib/services/pricing.service';
 import { apiSuccess, apiError } from '@/lib/api/response';
 
 export async function POST(
@@ -206,7 +206,7 @@ export async function GET(
     // Verify job exists
     const { data: job, error: jobError } = await supabase!
       .from('jobs')
-      .select('id, customer_id, status')
+      .select('id, customer_id, status, category, city, address_line, location_point')
       .eq('id', jobId)
       .maybeSingle();
 
@@ -218,7 +218,7 @@ export async function GET(
     const isAdmin = profile.role === 'admin';
     const isWorker = profile.role === 'worker';
 
-    // 1. Customer or Admin: Can view all bids with worker public summary
+    // 1. Customer or Admin: Can view all bids with worker public summary & benchmark comparison
     if (isCustomerOwner || isAdmin) {
       const { data: bids, error: bidsError } = await supabase!
         .from('bids')
@@ -249,10 +249,163 @@ export async function GET(
         return apiError('Failed to fetch bids for job.', 500, 'DATABASE_ERROR');
       }
 
+      // Fetch matching price benchmark for this job's category and location
+      const benchmark = await PricingService.fetchBenchmarkForArea(
+        supabase!,
+        job.category,
+        job.city,
+        job.address_line
+      );
+
+      // Collect worker IDs to query worker profiles and reviews
+      const workerIds = (bids ?? []).map((b) => b.worker_id).filter(Boolean);
+
+      // Query worker_profiles
+      let workerProfilesMap = new Map<string, { id: string; user_id: string; service_location?: unknown; years_experience?: number; reputation_score?: number }>();
+      if (workerIds.length > 0) {
+        const { data: workerProfiles } = await supabase!
+          .from('worker_profiles')
+          .select('id, user_id, service_location, years_experience, reputation_score')
+          .or(`user_id.in.(${workerIds.join(',')}),id.in.(${workerIds.join(',')})`);
+
+        if (workerProfiles && Array.isArray(workerProfiles)) {
+          for (const wp of workerProfiles) {
+            workerProfilesMap.set(wp.user_id, wp);
+            workerProfilesMap.set(wp.id, wp);
+          }
+        }
+      }
+
+      // Query reviews for bidding workers to calculate real rating & review count
+      const reviewStatsMap = new Map<string, { count: number; avgRating: number }>();
+      if (workerIds.length > 0) {
+        const targetWorkerProfileIds = Array.from(workerProfilesMap.values()).map((wp) => wp.id);
+        const allIdsToSearch = Array.from(new Set([...workerIds, ...targetWorkerProfileIds]));
+        const { data: reviews } = await supabase!
+          .from('reviews')
+          .select('worker_id, rating, rating_overall')
+          .in('worker_id', allIdsToSearch);
+
+        if (reviews && Array.isArray(reviews)) {
+          const sums = new Map<string, { total: number; count: number }>();
+          for (const rev of reviews) {
+            const rVal = rev.rating_overall || rev.rating || 5;
+            const current = sums.get(rev.worker_id) || { total: 0, count: 0 };
+            current.total += rVal;
+            current.count += 1;
+            sums.set(rev.worker_id, current);
+          }
+          for (const [wId, agg] of sums.entries()) {
+            reviewStatsMap.set(wId, {
+              count: agg.count,
+              avgRating: Math.round((agg.total / agg.count) * 10) / 10,
+            });
+          }
+        }
+      }
+
+      // Job coordinates
+      const parseCoords = (loc: unknown): { lat: number; lng: number } | null => {
+        if (!loc) return null;
+        if (typeof loc === 'string') {
+          const match = loc.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
+          if (match) return { lng: parseFloat(match[1]), lat: parseFloat(match[2]) };
+        } else if (typeof loc === 'object' && loc !== null && 'coordinates' in loc) {
+          const c = (loc as { coordinates: number[] }).coordinates;
+          if (Array.isArray(c) && c.length >= 2) return { lng: c[0], lat: c[1] };
+        }
+        return null;
+      };
+
+      const jobCoords = parseCoords(job.location_point);
+
+      const calculateDistKm = (c1: { lat: number; lng: number } | null, c2: { lat: number; lng: number } | null): number | null => {
+        if (!c1 || !c2) return null;
+        const R = 6371;
+        const dLat = ((c2.lat - c1.lat) * Math.PI) / 180;
+        const dLon = ((c2.lng - c1.lng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((c1.lat * Math.PI) / 180) *
+            Math.cos((c2.lat * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return Math.round(R * c * 10) / 10;
+      };
+
+      // Enrich bids with Fair Price and recommendation scoring
+      type EnrichedBidType = NonNullable<typeof bids>[number] & {
+        fair_price_evaluation: 'BELOW_AVERAGE' | 'FAIR_MARKET' | 'ABOVE_AVERAGE' | null;
+        fair_price_label: 'Below Range' | 'Fair Price' | 'Above Range' | 'Benchmark unavailable';
+        match_score: number;
+        is_best_match: boolean;
+        recommendation_reason: string | null;
+        worker_distance_km: number | null;
+        worker_review_count: number;
+        worker_average_rating: number | null;
+      };
+
+      const rawEnriched: EnrichedBidType[] = (bids ?? []).map((b) => {
+        const wp = workerProfilesMap.get(b.worker_id);
+        const workerCoords = wp ? parseCoords(wp.service_location) : null;
+        const distKm = calculateDistKm(jobCoords, workerCoords);
+
+        const revStats = reviewStatsMap.get(b.worker_id) || (wp ? reviewStatsMap.get(wp.id) : null);
+        const avgRating = revStats ? revStats.avgRating : null;
+        const reviewCount = revStats ? revStats.count : 0;
+        const expYears = wp?.years_experience || 0;
+
+        const evaluation = PricingService.evaluateBidAgainstBenchmark(b.offered_amount_inr, benchmark);
+        const label = getFairPriceLabel(evaluation);
+
+        const { score, reason } = PricingService.scoreBidForRecommendation(
+          b.offered_amount_inr,
+          distKm,
+          benchmark,
+          expYears,
+          avgRating
+        );
+
+        return {
+          ...b,
+          fair_price_evaluation: evaluation,
+          fair_price_label: label,
+          match_score: score,
+          is_best_match: false,
+          recommendation_reason: reason,
+          worker_distance_km: distKm,
+          worker_review_count: reviewCount,
+          worker_average_rating: avgRating,
+        };
+      });
+
+      // Find highest-scoring eligible (PENDING) bid to label as "Best Match"
+      const eligibleBids = rawEnriched.filter((b) => b.status === 'PENDING');
+      if (eligibleBids.length > 0) {
+        eligibleBids.sort((a, b) => b.match_score - a.match_score);
+        const best = eligibleBids[0];
+        for (const item of rawEnriched) {
+          if (item.id === best.id) {
+            item.is_best_match = true;
+          }
+        }
+      }
+
       return apiSuccess({
         jobId,
-        bids: bids ?? [],
-        totalBids: bids?.length ?? 0,
+        benchmark: benchmark
+          ? {
+              category: benchmark.category,
+              city: benchmark.city,
+              microMarketArea: benchmark.micro_market_area,
+              minPriceInr: benchmark.min_price_inr,
+              medianPriceInr: benchmark.median_price_inr,
+              maxPriceInr: benchmark.max_price_inr,
+            }
+          : null,
+        bids: rawEnriched,
+        totalBids: rawEnriched.length,
       });
     }
 

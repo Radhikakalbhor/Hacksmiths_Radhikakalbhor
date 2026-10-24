@@ -89,6 +89,28 @@ interface NearbyWorker {
   total_completed_jobs: number;
   is_available: boolean;
   distance_meters: number;
+  average_rating?: number | null;
+  review_count?: number;
+}
+
+interface BenchmarkData {
+  category: string;
+  city?: string;
+  microMarketArea?: string;
+  minPriceInr: number;
+  medianPriceInr: number;
+  maxPriceInr: number;
+}
+
+interface CustomerReviewData {
+  id: string;
+  job_id?: string;
+  customer_id?: string;
+  worker_id?: string;
+  rating: number;
+  rating_overall?: number;
+  review_text?: string | null;
+  created_at: string;
 }
 
 function parseCoords(locationPoint: unknown, fallbackCity?: string): { lat: number; lng: number } {
@@ -128,6 +150,17 @@ function JobDiscoveryContent() {
   const [bidsCount, setBidsCount] = useState<number>(0);
   const [loadingJob, setLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
+
+  // Price Benchmark & Savings
+  const [benchmark, setBenchmark] = useState<BenchmarkData | null>(null);
+
+  // Reviews & Ratings
+  const [review, setReview] = useState<CustomerReviewData | null>(null);
+  const [userRating, setUserRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState<string>('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
 
   // Workers Discovery
   const [workers, setWorkers] = useState<NearbyWorker[]>([]);
@@ -194,6 +227,13 @@ function JobDiscoveryContent() {
       setJob(jobData);
       setBidsCount(Array.isArray(data.data?.bids) ? data.data.bids.length : 0);
 
+      if (data.data?.benchmark) {
+        setBenchmark(data.data.benchmark);
+      }
+      if (data.data?.review) {
+        setReview(data.data.review);
+      }
+
       // Check for active booking state in ai_details
       if (jobData?.ai_details?.booking) {
         const b = jobData.ai_details.booking;
@@ -213,6 +253,38 @@ function JobDiscoveryContent() {
       setLoadingJob(false);
     }
   }, [jobId, router]);
+
+  // Submit Customer Review
+  const handleSubmitReview = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!jobId || !job || isSubmittingReview) return;
+    setIsSubmittingReview(true);
+    setReviewError(null);
+    setReviewSuccess(null);
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rating: userRating,
+          review_text: reviewComment.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setReviewError(data.error || 'Failed to submit review.');
+        return;
+      }
+      setReview(data.data?.review || null);
+      setReviewSuccess('Thank you! Your verified rating and review has been submitted.');
+      setReviewComment('');
+      await loadJob();
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'Network error submitting review.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   useEffect(() => {
     loadJob();
@@ -543,6 +615,79 @@ function JobDiscoveryContent() {
   const travelMinutes = booking?.estimatedArrivalMinutes || 18;
   const remainingMinutes = Math.ceil(simulatedCountdown / 60);
 
+  // Derived Timeline States (Feature 3)
+  const isJobCancelled = job.status === 'cancelled' || booking?.stage === 'cancelled';
+  const isJobCompleted = job.status === 'completed' || booking?.stage === 'completed';
+  const isWorkerArrived =
+    isJobCompleted ||
+    booking?.stage === 'arrived' ||
+    booking?.stage === 'in_progress' ||
+    Boolean(booking?.otpVerified);
+  const isBidAccepted =
+    isJobCompleted ||
+    isWorkerArrived ||
+    Boolean(booking && ['accepted', 'on_the_way'].includes(booking.stage)) ||
+    ['assigned', 'in_progress'].includes(job.status);
+  const hasBids = bidsCount > 0 || isBidAccepted;
+
+  // 5 Status Milestones: Posted → Bids Received → Accepted → Arrived → Completed
+  const timelineMilestones = [
+    {
+      id: 'posted',
+      label: 'Posted',
+      status: 'completed' as const,
+      timestamp: new Date(job.created_at).toLocaleDateString(),
+      subtitle: 'Request published',
+    },
+    {
+      id: 'bids_received',
+      label: 'Bids Received',
+      status: isBidAccepted || hasBids
+        ? ('completed' as const)
+        : !isJobCancelled && job.status === 'open'
+        ? ('current' as const)
+        : ('pending' as const),
+      subtitle: bidsCount > 0 ? `${bidsCount} Bid(s) Received` : isBidAccepted ? 'Direct Booking' : '0 Bids (Awaiting)',
+    },
+    {
+      id: 'accepted',
+      label: 'Accepted',
+      status: isBidAccepted
+        ? ('completed' as const)
+        : !isJobCancelled && bidsCount > 0 && !isBidAccepted
+        ? ('current' as const)
+        : ('pending' as const),
+      subtitle: booking?.workerName ? `Assigned: ${booking.workerName}` : isBidAccepted ? 'Worker Assigned' : 'Awaiting Selection',
+    },
+    {
+      id: 'arrived',
+      label: 'Arrived',
+      status: isWorkerArrived
+        ? ('completed' as const)
+        : !isJobCancelled && isBidAccepted && !isWorkerArrived && booking?.stage === 'on_the_way'
+        ? ('current' as const)
+        : ('pending' as const),
+      subtitle: booking?.otpVerified ? 'OTP Verified On-Site' : isWorkerArrived ? 'Worker On Site' : booking?.stage === 'on_the_way' ? 'En Route to Address' : 'Awaiting Arrival',
+    },
+    {
+      id: 'completed',
+      label: 'Completed',
+      status: isJobCompleted
+        ? ('completed' as const)
+        : !isJobCancelled && (job.status === 'in_progress' || booking?.stage === 'in_progress' || booking?.stage === 'arrived')
+        ? ('current' as const)
+        : ('pending' as const),
+      subtitle: isJobCompleted ? 'Service Fulfilled' : job.status === 'in_progress' || booking?.stage === 'in_progress' ? 'Work In Progress' : 'Final Completion',
+    },
+  ];
+
+  // Feature 4: "You Saved ₹X" Calculation
+  const acceptedPrice = booking?.agreedPriceInr;
+  const savingsAgainstMedian =
+    acceptedPrice && benchmark?.medianPriceInr && benchmark.medianPriceInr > acceptedPrice
+      ? benchmark.medianPriceInr - acceptedPrice
+      : null;
+
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Top Navigation */}
@@ -561,6 +706,271 @@ function JobDiscoveryContent() {
           <span className="text-xs text-[#83928E] font-mono">#{job.id.slice(0, 8)}</span>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 📍 FEATURE 3: JOB STATUS TIMELINE */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-3xl border border-[#E5DFD2] p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base font-bold text-[#152220] flex items-center gap-2">
+              <Compass className="w-4 h-4 text-[#217E66]" />
+              <span>Service Progress Timeline</span>
+            </h3>
+            <p className="text-xs text-[#576563]">
+              Real-time persisted lifecycle status from job creation to final completion.
+            </p>
+          </div>
+          {isJobCancelled ? (
+            <Badge variant="red" className="flex items-center gap-1 w-fit">
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Job Cancelled</span>
+            </Badge>
+          ) : isJobCompleted ? (
+            <Badge variant="green" className="flex items-center gap-1 w-fit">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Job Completed</span>
+            </Badge>
+          ) : (
+            <Badge variant="teal" className="flex items-center gap-1 w-fit">
+              <Clock className="w-3.5 h-3.5" />
+              <span>In Progress</span>
+            </Badge>
+          )}
+        </div>
+
+        {/* Milestone Steps */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
+          {timelineMilestones.map((ms, idx) => {
+            const isCompleted = ms.status === 'completed';
+            const isCurrent = ms.status === 'current';
+
+            return (
+              <div
+                key={ms.id}
+                className={`p-3 rounded-2xl border transition-all text-center flex flex-col justify-between ${
+                  isCurrent
+                    ? 'bg-[#EBF4F3] border-[#217E66] text-[#0D4A52] shadow-sm ring-1 ring-[#217E66]'
+                    : isCompleted
+                    ? 'bg-[#FAF9F5] border-[#BCE5DA] text-[#152220]'
+                    : 'bg-gray-50/60 border-gray-200 text-gray-400 opacity-70'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1 mb-1.5">
+                  {isCompleted ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : isCurrent ? (
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#217E66] animate-ping" />
+                  ) : (
+                    <span className="text-[11px] font-mono text-gray-400 font-bold">{idx + 1}</span>
+                  )}
+                  <span className={`text-xs font-bold ${isCurrent ? 'text-[#0D4A52]' : isCompleted ? 'text-[#152220]' : 'text-gray-400'}`}>
+                    {ms.label}
+                  </span>
+                </div>
+                <p className="text-[10px] leading-tight text-[#576563] truncate">
+                  {ms.subtitle}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Cancelled Banner */}
+        {isJobCancelled && (
+          <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-2.5">
+            <XCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-bold">Cancellation Notice:</span>
+              <p className="text-red-800">
+                {booking?.cancellationReason || 'This service request was cancelled. Further milestone progression is stopped.'}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 💰 FEATURE 4: "YOU SAVED ₹X" BENCHMARK COMPARISON */}
+      {/* ========================================================================= */}
+      {savingsAgainstMedian !== null && benchmark && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-50 via-[#EBF4F3] to-teal-50 border-2 border-emerald-300 shadow-sm flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+            <IndianRupee className="w-5 h-5" />
+          </div>
+          <div className="space-y-1 min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-700 text-white shadow-xs">
+                You Saved ₹{savingsAgainstMedian}
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">
+                Benchmark Comparison
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-[#152220] font-medium leading-relaxed">
+              Your agreed service fare of <strong>₹{acceptedPrice}</strong> is <strong>₹{savingsAgainstMedian} below</strong> the local median benchmark of <strong>₹{benchmark.medianPriceInr}</strong> for {job.category} in {job.city}.
+            </p>
+            <p className="text-[10px] text-[#576563]">
+              * Comparison based on Sahayak local median price benchmarks for this trade and area. Not a guaranteed market saving.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ⭐ FEATURE 5: REVIEWS AND RATINGS (Customer Review Card) */}
+      {/* ========================================================================= */}
+      {isJobCompleted && (
+        <div className="bg-white rounded-3xl border border-[#BCE5DA] p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <h3 className="text-base font-bold text-[#152220] flex items-center gap-2">
+                <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                <span>Service Rating &amp; Review</span>
+              </h3>
+              <p className="text-xs text-[#576563]">
+                {review
+                  ? 'Your verified customer feedback recorded for this completed job.'
+                  : `Rate your experience with ${booking?.workerName || 'your assigned professional'}.`}
+              </p>
+            </div>
+            {review && (
+              <Badge variant="green" className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Verified Review Submitted</span>
+              </Badge>
+            )}
+          </div>
+
+          {review ? (
+            /* Display Submitted Review */
+            <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-amber-500">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-4 h-4 ${
+                        star <= (review.rating_overall || review.rating)
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  ))}
+                  <span className="text-xs font-bold text-[#152220] ml-1">
+                    {(review.rating_overall || review.rating)} / 5 Stars
+                  </span>
+                </div>
+                <span className="text-[11px] text-[#83928E]">
+                  Submitted on {new Date(review.created_at).toLocaleDateString()}
+                </span>
+              </div>
+
+              {review.review_text ? (
+                <p className="text-xs text-[#152220] italic bg-white p-3 rounded-xl border border-gray-200">
+                  &ldquo;{review.review_text}&rdquo;
+                </p>
+              ) : (
+                <p className="text-xs text-[#83928E] italic">No written comment provided.</p>
+              )}
+
+              <p className="text-[10px] text-[#83928E]">
+                ⭐ This verified rating contributes directly to {booking?.workerName || 'the worker'}&apos;s public reputation on Sahayak.
+              </p>
+            </div>
+          ) : (
+            /* Review Submission Form */
+            <form onSubmit={handleSubmitReview} className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] space-y-3.5">
+              {reviewSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{reviewSuccess}</span>
+                </div>
+              )}
+
+              {reviewError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{reviewError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#152220] block">
+                  Select Rating (1 to 5 Stars) <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setUserRating(star)}
+                      className="p-1 rounded-lg hover:scale-110 transition-transform focus:outline-none"
+                    >
+                      <Star
+                        className={`w-7 h-7 ${
+                          star <= userRating
+                            ? 'fill-amber-400 text-amber-400 drop-shadow-xs'
+                            : 'text-gray-300 hover:text-amber-200'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-xs font-extrabold text-[#0D4A52] ml-2">
+                    {userRating === 5
+                      ? '5 - Excellent'
+                      : userRating === 4
+                      ? '4 - Very Good'
+                      : userRating === 3
+                      ? '3 - Average'
+                      : userRating === 2
+                      ? '2 - Poor'
+                      : '1 - Terrible'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-[#152220] block">
+                  Review Comment (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Share details about punctuality, work quality, behavior, or resolution..."
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D4A52] outline-none bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[10px] text-[#83928E]">
+                  🔒 Enforced 1 verified review per completed job.
+                </span>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  type="submit"
+                  disabled={isSubmittingReview}
+                  className="text-xs font-bold gap-1.5 bg-[#0D4A52] hover:bg-[#072F35]"
+                >
+                  {isSubmittingReview ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Submitting Review...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Star className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+                      <span>Submit Verified Review</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 🚀 ACTIVE BOOKING & TRACKING EXPERIENCE (Uber/Rapido style) */}
@@ -1220,12 +1630,20 @@ function JobDiscoveryContent() {
 
                     {/* Reputation & Stats */}
                     <div className="flex items-center justify-between py-2 border-y border-gray-100 text-xs">
-                      <div className="flex items-center gap-1 text-amber-600 font-bold">
-                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                        <span>{w.reputation_score?.toFixed(1) || '5.0'}</span>
-                        <span className="text-[10px] text-[#83928E] font-normal">
-                          ({w.total_completed_jobs} jobs)
-                        </span>
+                      <div className="flex items-center gap-1">
+                        {w.review_count && w.review_count > 0 && w.average_rating ? (
+                          <div className="flex items-center gap-1 text-amber-600 font-bold">
+                            <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                            <span>{w.average_rating.toFixed(1)}</span>
+                            <span className="text-[10px] text-[#83928E] font-normal">
+                              ({w.review_count} {w.review_count === 1 ? 'review' : 'reviews'})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-medium text-[#83928E] bg-gray-100 px-2 py-0.5 rounded-full">
+                            Not rated yet
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1 text-[11px] text-[#0D4A52] font-semibold">
@@ -1342,12 +1760,20 @@ function JobDiscoveryContent() {
                   <span>•</span>
                   <span>{(bookingConfirmWorker.distance_meters / 1000).toFixed(1)} km away</span>
                 </div>
-                <div className="flex items-center gap-1 text-amber-600 font-bold text-xs mt-0.5">
-                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                  <span>{bookingConfirmWorker.reputation_score?.toFixed(1) || '5.0'}</span>
-                  <span className="text-[#83928E] font-normal">
-                    ({bookingConfirmWorker.total_completed_jobs} completed)
-                  </span>
+                <div className="flex items-center gap-1 text-xs mt-0.5">
+                  {bookingConfirmWorker.review_count && bookingConfirmWorker.review_count > 0 && bookingConfirmWorker.average_rating ? (
+                    <div className="flex items-center gap-1 text-amber-600 font-bold">
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>{bookingConfirmWorker.average_rating.toFixed(1)}</span>
+                      <span className="text-[#83928E] font-normal text-[11px]">
+                        ({bookingConfirmWorker.review_count} {bookingConfirmWorker.review_count === 1 ? 'review' : 'reviews'})
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-[#83928E] bg-gray-100 px-2 py-0.5 rounded-full">
+                      Not rated yet
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1680,8 +2106,17 @@ function JobDiscoveryContent() {
               <div>
                 <span className="text-[10px] text-[#83928E] block">Reputation</span>
                 <span className="font-bold text-[#152220] flex items-center justify-center gap-1 mt-0.5">
-                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                  {activeWorkerProfile.reputation_score?.toFixed(1) || '5.0'}
+                  {activeWorkerProfile.review_count && activeWorkerProfile.review_count > 0 && activeWorkerProfile.average_rating ? (
+                    <>
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>{activeWorkerProfile.average_rating.toFixed(1)}</span>
+                      <span className="text-[10px] text-[#83928E] font-normal">
+                        ({activeWorkerProfile.review_count})
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-[#83928E] font-normal">Not rated yet</span>
+                  )}
                 </span>
               </div>
               <div className="border-x border-[#E5DFD2]">

@@ -72,11 +72,49 @@ export async function GET(request: NextRequest) {
       maxResults: limit,
     });
 
+    // Query real persisted reviews for each returned worker
+    let enrichedWorkers = workers as Array<typeof workers[number] & { review_count: number; average_rating: number | null }>;
+    if (workers.length > 0) {
+      const allWorkerIds = Array.from(new Set(workers.map((w) => w.worker_id).filter(Boolean)));
+
+      const { data: reviews } = await supabase
+        .from('reviews')
+        .select('worker_id, rating, rating_overall')
+        .in('worker_id', allWorkerIds);
+
+      const reviewStatsMap = new Map<string, { count: number; avgRating: number }>();
+      if (reviews && Array.isArray(reviews)) {
+        const sums = new Map<string, { total: number; count: number }>();
+        for (const rev of reviews) {
+          const rVal = rev.rating_overall || rev.rating || 5;
+          const current = sums.get(rev.worker_id) || { total: 0, count: 0 };
+          current.total += rVal;
+          current.count += 1;
+          sums.set(rev.worker_id, current);
+        }
+        for (const [wId, agg] of sums.entries()) {
+          reviewStatsMap.set(wId, {
+            count: agg.count,
+            avgRating: Math.round((agg.total / agg.count) * 10) / 10,
+          });
+        }
+      }
+
+      enrichedWorkers = workers.map((w) => {
+        const stats = reviewStatsMap.get(w.worker_id);
+        return {
+          ...w,
+          review_count: stats ? stats.count : 0,
+          average_rating: stats ? stats.avgRating : null,
+        };
+      });
+    }
+
     return apiSuccess({
-      workers,
+      workers: enrichedWorkers,
       searchCenter: { latitude: lat, longitude: lng },
       radiusMeters,
-      totalReturned: workers.length,
+      totalReturned: enrichedWorkers.length,
     });
   } catch (error: unknown) {
     if (error && typeof error === 'object' && 'digest' in error && (error as { digest: string }).digest === 'NEXT_PRERENDER_INTERRUPTED') {

@@ -361,8 +361,13 @@ export interface Database {
           rating: number;
           punctuality_rating: number | null;
           quality_rating: number | null;
+          rating_overall: number | null;
+          rating_punctuality: number | null;
+          rating_work_quality: number | null;
+          rating_behavior: number | null;
           review_text: string | null;
           created_at: string;
+          updated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -372,14 +377,24 @@ export interface Database {
           rating: number;
           punctuality_rating?: number | null;
           quality_rating?: number | null;
+          rating_overall?: number | null;
+          rating_punctuality?: number | null;
+          rating_work_quality?: number | null;
+          rating_behavior?: number | null;
           review_text?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           rating?: number;
           punctuality_rating?: number | null;
           quality_rating?: number | null;
+          rating_overall?: number | null;
+          rating_punctuality?: number | null;
+          rating_work_quality?: number | null;
+          rating_behavior?: number | null;
           review_text?: string | null;
+          updated_at?: string;
         };
         Relationships: [
           {

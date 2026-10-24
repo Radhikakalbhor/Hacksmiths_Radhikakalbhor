@@ -9,15 +9,27 @@ import { PriceBenchmark } from '@/types/bids';
 
 export type BenchmarkRow = Database['public']['Tables']['price_benchmarks']['Row'];
 export type BenchmarkEvaluation = 'BELOW_AVERAGE' | 'FAIR_MARKET' | 'ABOVE_AVERAGE';
+export type FairPriceLabel = 'Below Range' | 'Fair Price' | 'Above Range' | 'Benchmark unavailable';
+
+export function getFairPriceLabel(evaluation: BenchmarkEvaluation | null | undefined): FairPriceLabel {
+  if (!evaluation) return 'Benchmark unavailable';
+  if (evaluation === 'BELOW_AVERAGE') return 'Below Range';
+  if (evaluation === 'FAIR_MARKET') return 'Fair Price';
+  if (evaluation === 'ABOVE_AVERAGE') return 'Above Range';
+  return 'Benchmark unavailable';
+}
 
 export class PricingService {
+  static getFairPriceLabel = getFairPriceLabel;
+
   /**
    * Assesses whether a worker bid is competitive against the local micro-market benchmark.
    */
   static evaluateBidAgainstBenchmark(
     totalBidInr: number,
-    benchmark: PriceBenchmark | BenchmarkRow
-  ): BenchmarkEvaluation {
+    benchmark: PriceBenchmark | BenchmarkRow | null | undefined
+  ): BenchmarkEvaluation | null {
+    if (!benchmark) return null;
     const min = 'minPriceInr' in benchmark ? benchmark.minPriceInr : benchmark.min_price_inr;
     const max = 'maxPriceInr' in benchmark ? benchmark.maxPriceInr : benchmark.max_price_inr;
 
@@ -28,6 +40,109 @@ export class PricingService {
       return 'ABOVE_AVERAGE';
     }
     return 'FAIR_MARKET';
+  }
+
+  /**
+   * Calculates customer savings compared against local median price benchmark.
+   * Never returns misleading zero or negative savings.
+   */
+  static calculateBenchmarkSavings(
+    acceptedPriceInr: number,
+    benchmarkMedianInr: number | null | undefined
+  ): { savingsInr: number; medianBenchmarkInr: number } | null {
+    if (!benchmarkMedianInr || typeof benchmarkMedianInr !== 'number' || benchmarkMedianInr <= 0) return null;
+    if (!acceptedPriceInr || typeof acceptedPriceInr !== 'number' || acceptedPriceInr <= 0 || isNaN(acceptedPriceInr)) return null;
+    const diff = Math.round(benchmarkMedianInr - acceptedPriceInr);
+    if (diff <= 0) return null;
+    return {
+      savingsInr: diff,
+      medianBenchmarkInr: benchmarkMedianInr,
+    };
+  }
+
+  /**
+   * Scores and ranks eligible bids using a transparent combination of
+   * price fairness (up to 50 pts), worker proximity (up to 30 pts),
+   * and worker experience/rating (up to 20 pts).
+   */
+  static scoreBidForRecommendation(
+    offeredAmountInr: number,
+    distanceKm: number | null | undefined,
+    benchmark: BenchmarkRow | PriceBenchmark | null | undefined,
+    workerExperienceYears = 0,
+    workerRating: number | null = null
+  ): { score: number; reason: string } {
+    let priceScore = 35;
+    let priceReason = 'Competitive bid';
+
+    const minPrice = benchmark
+      ? 'minPriceInr' in benchmark
+        ? benchmark.minPriceInr
+        : benchmark.min_price_inr
+      : null;
+    const maxPrice = benchmark
+      ? 'maxPriceInr' in benchmark
+        ? benchmark.maxPriceInr
+        : benchmark.max_price_inr
+      : null;
+
+    if (minPrice != null && maxPrice != null) {
+      if (offeredAmountInr >= minPrice && offeredAmountInr <= maxPrice) {
+        priceScore = 50;
+        priceReason = `Fair price (₹${offeredAmountInr} within local range ₹${minPrice} - ₹${maxPrice})`;
+      } else if (offeredAmountInr < minPrice) {
+        priceScore = 45;
+        priceReason = `Below typical range (budget-friendly at ₹${offeredAmountInr})`;
+      } else {
+        const excessRatio = (offeredAmountInr - maxPrice) / maxPrice;
+        priceScore = Math.max(10, Math.round(40 - excessRatio * 40));
+        priceReason = `Above typical range of ₹${maxPrice}`;
+      }
+    }
+
+    // Distance score: 0 to 30 points
+    let distScore = 20; // default when distance is unknown
+    let distReason = '';
+    if (typeof distanceKm === 'number' && !isNaN(distanceKm)) {
+      if (distanceKm <= 3) {
+        distScore = 30;
+        distReason = `closest proximity (${distanceKm.toFixed(1)} km away)`;
+      } else if (distanceKm <= 7) {
+        distScore = 25;
+        distReason = `nearby (${distanceKm.toFixed(1)} km away)`;
+      } else if (distanceKm <= 15) {
+        distScore = 18;
+        distReason = `${distanceKm.toFixed(1)} km away`;
+      } else {
+        distScore = 10;
+        distReason = `${distanceKm.toFixed(1)} km away`;
+      }
+    }
+
+    // Experience & Rating score: 0 to 20 points
+    let expScore = 12;
+    if (workerRating && workerRating >= 4.7) {
+      expScore += 6;
+    } else if (workerRating && workerRating >= 4.0) {
+      expScore += 3;
+    }
+    if (workerExperienceYears >= 5) {
+      expScore += 2;
+    }
+    expScore = Math.min(20, expScore);
+
+    const totalScore = priceScore + distScore + expScore;
+
+    // Reason synthesis
+    let reason = priceReason;
+    if (distReason) {
+      reason += ` and ${distReason}`;
+    }
+    if (workerRating && workerRating >= 4.5) {
+      reason += ` with ${workerRating.toFixed(1)}★ rating`;
+    }
+
+    return { score: totalScore, reason };
   }
 
   /**
