@@ -169,6 +169,10 @@ export interface Database {
           accepted_price_inr: number | null;
           scheduled_date: string | null;
           scheduled_time_slot: string | null;
+          cancelled_at?: string | null;
+          cancellation_reason?: string | null;
+          completed_at?: string | null;
+          started_at?: string | null;
           photo_urls?: string[] | null;
           ai_details: Json | null;
           created_at: string;
@@ -220,6 +224,10 @@ export interface Database {
           accepted_price_inr?: number | null;
           scheduled_date?: string | null;
           scheduled_time_slot?: string | null;
+          cancelled_at?: string | null;
+          cancellation_reason?: string | null;
+          completed_at?: string | null;
+          started_at?: string | null;
           ai_details?: Json | null;
           updated_at?: string;
         };

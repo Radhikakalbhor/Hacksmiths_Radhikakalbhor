@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, useCallback } from 'react';
+import React, { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -30,6 +30,7 @@ import {
   UserCheck,
   Timer,
   AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -40,6 +41,15 @@ import {
   ChatMessage,
   calculateEstimatedTravelTimeMinutes,
 } from '@/types/booking';
+
+const CANCELLATION_REASONS = [
+  'Estimated wait time is too long',
+  'I no longer need this service',
+  'I found a better price',
+  'I am not comfortable with this professional',
+  'I changed my mind',
+  'Other',
+] as const;
 
 interface JobDetails {
   id: string;
@@ -143,12 +153,22 @@ function JobDiscoveryContent() {
   const [chatInput, setChatInput] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Worker Transition & OTP States
   const [workerOtpInput, setWorkerOtpInput] = useState('');
   const [isTransitioningStatus, setIsTransitioningStatus] = useState(false);
   const [transitionError, setTransitionError] = useState<string | null>(null);
   const [transitionSuccess, setTransitionSuccess] = useState<string | null>(null);
+
+  // Cancellation States
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [selectedCancelReason, setSelectedCancelReason] = useState<string>('');
+  const [customCancelReason, setCustomCancelReason] = useState<string>('');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelSuccessMsg, setCancelSuccessMsg] = useState<string | null>(null);
 
   // Simulated countdown seconds for demo tracking
   const [simulatedCountdown, setSimulatedCountdown] = useState<number>(0);
@@ -261,14 +281,27 @@ function JobDiscoveryContent() {
   useEffect(() => {
     if (booking && showChatDrawer) {
       fetchMessages();
-      const interval = setInterval(fetchMessages, 6000);
+      const interval = setInterval(fetchMessages, 3000);
       return () => clearInterval(interval);
     }
   }, [booking, showChatDrawer, fetchMessages]);
 
+  // Auto-scroll chat to latest message
+  useEffect(() => {
+    if (showChatDrawer) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, showChatDrawer]);
+
   // 4. Simulated Arrival Countdown Timer
   useEffect(() => {
-    if (!booking || booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed') {
+    if (
+      !booking ||
+      booking.stage === 'arrived' ||
+      booking.stage === 'in_progress' ||
+      booking.stage === 'completed' ||
+      booking.stage === 'cancelled'
+    ) {
       return;
     }
     if (simulatedCountdown <= 0) return;
@@ -305,6 +338,7 @@ function JobDiscoveryContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workerId: bookingConfirmWorker.worker_id,
+          workerName: bookingConfirmWorker.full_name,
           offeredPriceInr: bookingAgreedPrice,
           distanceMeters: bookingConfirmWorker.distance_meters,
         }),
@@ -373,9 +407,10 @@ function JobDiscoveryContent() {
   // Send In-App Chat Message
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || chatInput).trim();
-    if (!text || !job) return;
+    if (!text || !job || isSendingMessage) return;
 
     setIsSendingMessage(true);
+    setChatError(null);
     try {
       const res = await fetch(`/api/jobs/${job.id}/messages`, {
         method: 'POST',
@@ -385,15 +420,76 @@ function JobDiscoveryContent() {
 
       const data = await res.json();
       if (res.ok && data.data?.message) {
-        setMessages((prev) => [...prev, data.data.message]);
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const next = [...prev];
+          if (!existingIds.has(data.data.message.id)) {
+            next.push(data.data.message);
+            existingIds.add(data.data.message.id);
+          }
+          if (data.data.demoReply && !existingIds.has(data.data.demoReply.id)) {
+            next.push(data.data.demoReply);
+          }
+          return next;
+        });
         setChatInput('');
+        // Trigger server sync
+        fetchMessages();
       } else {
-        alert(data.error || 'Failed to deliver message.');
+        setChatError(data.error || 'Failed to deliver message.');
       }
     } catch (err) {
       console.warn('Error sending message:', err);
+      setChatError('Network error while delivering message. Please try again.');
     } finally {
       setIsSendingMessage(false);
+    }
+  };
+
+  // Customer Booking Cancellation Handler
+  const handleConfirmCancellation = async () => {
+    if (!job || !booking) return;
+
+    const finalReason = selectedCancelReason === 'Other'
+      ? customCancelReason.trim()
+      : selectedCancelReason.trim();
+
+    if (!finalReason) {
+      setCancelError(selectedCancelReason === 'Other' ? 'Please specify your cancellation reason.' : 'Please select a reason for cancellation.');
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError(null);
+
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/booking-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetStage: 'cancelled',
+          cancellationReason: finalReason,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setCancelError(data.error || 'Failed to cancel booking. Please try again.');
+        setIsCancelling(false);
+        return;
+      }
+
+      const updatedBooking = data.data.booking as BookingState;
+      setBooking(updatedBooking);
+      setJob((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
+      setSimulatedCountdown(0);
+      setShowCancelModal(false);
+      setCancelSuccessMsg('Your booking has been cancelled successfully.');
+    } catch (err) {
+      console.error('Cancellation error:', err);
+      setCancelError('Network error while cancelling booking. Please try again.');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -501,27 +597,56 @@ function JobDiscoveryContent() {
                 </p>
               </div>
 
-              {/* Action Buttons: Call & Chat */}
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleCallWorker}
-                  className="gap-1.5 text-xs font-bold shadow-sm"
-                >
-                  <Phone className="w-3.5 h-3.5 text-[#0D4A52]" />
-                  <span>Call Worker</span>
-                </Button>
+              {/* Action Buttons: Call, Chat & Cancel */}
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {booking.stage !== 'completed' && booking.stage !== 'cancelled' ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleCallWorker}
+                      className="gap-1.5 text-xs font-bold shadow-sm"
+                    >
+                      <Phone className="w-3.5 h-3.5 text-[#0D4A52]" />
+                      <span>Call Worker</span>
+                    </Button>
 
-                <Button
-                  variant="accent"
-                  size="sm"
-                  onClick={() => setShowChatDrawer(true)}
-                  className="gap-1.5 text-xs font-bold shadow-sm bg-[#217E66] hover:bg-[#19604e]"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Message Worker</span>
-                </Button>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={() => setShowChatDrawer(true)}
+                      className="gap-1.5 text-xs font-bold shadow-sm bg-[#217E66] hover:bg-[#19604e]"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Message Worker</span>
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedCancelReason('');
+                        setCustomCancelReason('');
+                        setCancelError(null);
+                        setShowCancelModal(true);
+                      }}
+                      className="gap-1.5 text-xs font-bold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 border border-red-200 shadow-sm"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-red-600" />
+                      <span>Cancel Booking</span>
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowChatDrawer(true)}
+                    className="gap-1.5 text-xs font-bold shadow-sm"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>View Chat</span>
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -561,6 +686,38 @@ function JobDiscoveryContent() {
               </div>
             </div>
           </div>
+
+          {/* Cancellation Alerts & Notifications */}
+          {cancelSuccessMsg && (
+            <div className="p-4 mx-6 mt-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-semibold">{cancelSuccessMsg}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelSuccessMsg(null)}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {booking.stage === 'cancelled' && (
+            <div className="p-5 mx-6 mt-4 rounded-2xl bg-red-50/90 border border-red-200 text-red-900 text-xs flex items-start gap-3 shadow-sm">
+              <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="font-bold text-red-950 text-sm">Booking Cancelled</h4>
+                <p className="text-[#576563]">
+                  <strong>Reason:</strong> {booking.cancellationReason || 'No specific reason provided.'}
+                </p>
+                <p className="text-[11px] text-red-700 leading-relaxed">
+                  Worker assignment and real-time tracking have been terminated. You can post a new request or book another professional from the marketplace at any time.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Details Body */}
           <div className="p-6 space-y-6">
@@ -676,8 +833,8 @@ function JobDiscoveryContent() {
                       <Navigation className="w-4 h-4 text-[#217E66]" />
                       <span>Estimated Arrival</span>
                     </span>
-                    <Badge variant={booking.stage === 'arrived' ? 'green' : 'amber'}>
-                      {booking.stage === 'arrived' ? 'ARRIVED' : `${remainingMinutes > 0 ? remainingMinutes : travelMinutes} MINS`}
+                    <Badge variant={booking.stage === 'cancelled' ? 'red' : booking.stage === 'arrived' ? 'green' : 'amber'}>
+                      {booking.stage === 'cancelled' ? 'CANCELLED' : booking.stage === 'arrived' ? 'ARRIVED' : `${remainingMinutes > 0 ? remainingMinutes : travelMinutes} MINS`}
                     </Badge>
                   </div>
                   <p className="text-[11px] text-[#576563] leading-relaxed">
@@ -692,7 +849,7 @@ function JobDiscoveryContent() {
                       <span>Countdown:</span>
                     </span>
                     <span className="font-mono font-bold text-[#0D4A52]">
-                      {booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed'
+                      {booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed' || booking.stage === 'cancelled'
                         ? '00:00'
                         : `${Math.floor(simulatedCountdown / 60)
                             .toString()
@@ -702,10 +859,12 @@ function JobDiscoveryContent() {
 
                   <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-[#217E66] h-full transition-all duration-1000"
+                      className={`h-full transition-all duration-1000 ${booking.stage === 'cancelled' ? 'bg-red-400' : 'bg-[#217E66]'}`}
                       style={{
                         width:
-                          booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed'
+                          booking.stage === 'cancelled'
+                            ? '0%'
+                            : booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed'
                             ? '100%'
                             : `${Math.min(100, Math.max(10, 100 - (simulatedCountdown / (travelMinutes * 60)) * 100))}%`,
                       }}
@@ -714,7 +873,11 @@ function JobDiscoveryContent() {
                 </div>
 
                 <div className="text-[10px] text-[#83928E] space-y-0.5">
-                  {booking.isDemoWorker ? (
+                  {booking.stage === 'cancelled' ? (
+                    <span className="text-red-700 font-semibold block">
+                      🛑 Tracking simulation ended due to cancellation.
+                    </span>
+                  ) : booking.isDemoWorker ? (
                     <span className="text-amber-800 font-semibold block">
                       ⚡ Simulated tracking active for demo worker account.
                     </span>
@@ -1362,13 +1525,28 @@ function JobDiscoveryContent() {
                 <button
                   key={idx}
                   type="button"
+                  disabled={isSendingMessage}
                   onClick={() => handleSendMessage(suggestion)}
-                  className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white border border-[#BCE5DA] text-[#0D4A52] hover:bg-[#EBF4F3] transition-colors shrink-0 font-medium"
+                  className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white border border-[#BCE5DA] text-[#0D4A52] hover:bg-[#EBF4F3] transition-colors shrink-0 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {suggestion}
                 </button>
               ))}
             </div>
+
+            {/* Chat Error Banner */}
+            {chatError && (
+              <div className="p-2.5 mx-4 mt-2 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center justify-between shadow-sm">
+                <span>{chatError}</span>
+                <button
+                  type="button"
+                  onClick={() => setChatError(null)}
+                  className="text-red-500 hover:text-red-700 font-bold ml-2 text-sm leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
 
             {/* Messages Scroll Area */}
             <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#FAF8F3]/50">
@@ -1381,29 +1559,40 @@ function JobDiscoveryContent() {
               ) : (
                 messages.map((m) => {
                   const isMe = m.senderRole === 'customer';
+                  const isDemoSimulation = m.text.includes('[Demo Simulation]') || m.senderName.includes('Demo');
+                  const displayText = m.text.replace(/\[Demo Simulation\]\s*/g, '');
+
                   return (
                     <div
                       key={m.id}
                       className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                     >
-                      <div className="flex items-center gap-1 text-[10px] text-[#83928E] mb-0.5">
-                        <span className="font-semibold">{m.senderName}</span>
+                      <div className="flex items-center gap-1.5 text-[10px] text-[#83928E] mb-1">
+                        <span className="font-semibold text-[#152220]">{m.senderName}</span>
+                        {isDemoSimulation && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold text-[9px] border border-amber-200">
+                            Demo Simulation
+                          </span>
+                        )}
                         <span>•</span>
                         <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       <div
-                        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
+                        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
                           isMe
-                            ? 'bg-[#0D4A52] text-white rounded-tr-none'
+                            ? 'bg-[#0D4A52] text-white rounded-tr-none shadow-sm'
+                            : isDemoSimulation
+                            ? 'bg-amber-50/80 text-[#152220] border border-amber-200 rounded-tl-none shadow-sm'
                             : 'bg-white text-[#152220] border border-[#E5DFD2] rounded-tl-none shadow-sm'
                         }`}
                       >
-                        {m.text}
+                        {displayText}
                       </div>
                     </div>
                   );
                 })
               )}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input Bar */}
@@ -1412,11 +1601,15 @@ function JobDiscoveryContent() {
                 type="text"
                 placeholder="Type a message to your professional..."
                 value={chatInput}
+                disabled={isSendingMessage}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSendMessage();
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
                 }}
-                className="flex-1 px-3.5 py-2 text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D4A52] outline-none"
+                className="flex-1 px-3.5 py-2 text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D4A52] outline-none disabled:bg-gray-50"
               />
               <Button
                 variant="primary"
@@ -1559,6 +1752,139 @@ function JobDiscoveryContent() {
                 onClick={() => setActiveWorkerProfile(null)}
               >
                 Close Profile
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🛑 CANCELLATION CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-[#E5DFD2] max-w-md w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center border border-red-200 shrink-0">
+                  <XCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#152220]">Cancel Booking</h3>
+                  <p className="text-xs text-[#576563]">
+                    Please select a reason to cancel service with {booking?.workerName || 'this professional'}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isCancelling) setShowCancelModal(false);
+                }}
+                className="p-1 rounded-lg text-[#83928E] hover:text-[#152220] hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {cancelError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{cancelError}</span>
+              </div>
+            )}
+
+            {/* Reasons Radio List */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#152220] block">
+                Select Reason for Cancellation <span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {CANCELLATION_REASONS.map((reason) => {
+                  const isSelected = selectedCancelReason === reason;
+                  return (
+                    <label
+                      key={reason}
+                      className={`flex items-center gap-3 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                        isSelected
+                          ? 'border-[#0D4A52] bg-[#EBF4F3]/60 font-semibold text-[#0D4A52]'
+                          : 'border-[#E5DFD2] bg-white text-[#576563] hover:bg-[#FAF9F5]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancellationReason"
+                        value={reason}
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedCancelReason(reason);
+                          setCancelError(null);
+                        }}
+                        className="w-4 h-4 text-[#0D4A52] focus:ring-[#0D4A52] border-gray-300"
+                      />
+                      <span>{reason}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Reason Field for "Other" */}
+            {selectedCancelReason === 'Other' && (
+              <div className="space-y-1.5 animate-in fade-in">
+                <label className="text-xs font-bold text-[#152220] flex items-center justify-between">
+                  <span>Please specify reason: <span className="text-red-500">*</span></span>
+                  <span className="text-[10px] text-[#83928E] font-normal">Required</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={customCancelReason}
+                  onChange={(e) => {
+                    setCustomCancelReason(e.target.value);
+                    if (cancelError) setCancelError(null);
+                  }}
+                  placeholder="Tell us what went wrong so we can improve..."
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D4A52] outline-none"
+                />
+              </div>
+            )}
+
+            {/* Warning Note */}
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+              ⚠️ Cancelling will immediately stop the professional’s travel dispatch. Your job will be returned to the open marketplace so you can invite or receive new offers.
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={isCancelling}
+                onClick={() => setShowCancelModal(false)}
+                className="text-xs"
+              >
+                Keep Booking
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={isCancelling}
+                onClick={handleConfirmCancellation}
+                className="text-xs font-bold gap-1.5"
+              >
+                {isCancelling ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Cancelling...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Confirm Cancellation</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>

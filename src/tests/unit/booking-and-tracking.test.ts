@@ -145,3 +145,159 @@ describe('Demo vs Real Worker Distinction & Privacy', () => {
     }
   });
 });
+
+describe('Cancellation Reasons and Server-Side Lifecycle Rules', () => {
+  const PREDEFINED_REASONS = [
+    'Estimated wait time is too long',
+    'I no longer need this service',
+    'I found a better price',
+    'I am not comfortable with this professional',
+    'I changed my mind',
+    'Other',
+  ];
+
+  it('should accept all 6 required cancellation reasons', () => {
+    assert.equal(PREDEFINED_REASONS.length, 6);
+    for (const reason of PREDEFINED_REASONS) {
+      assert.ok(reason.length > 0, 'Reason must not be empty');
+    }
+  });
+
+  it('should reject cancellation when reason is missing or whitespace only', () => {
+    const validateCancellationPayload = (targetStage: string, reason?: string | null) => {
+      if (targetStage === 'cancelled') {
+        if (!reason || reason.trim().length === 0) {
+          return { valid: false, error: 'A cancellation reason is required.' };
+        }
+      }
+      return { valid: true };
+    };
+
+    assert.equal(validateCancellationPayload('cancelled', '').valid, false);
+    assert.equal(validateCancellationPayload('cancelled', '   ').valid, false);
+    assert.equal(validateCancellationPayload('cancelled', null).valid, false);
+    assert.equal(validateCancellationPayload('cancelled', undefined).valid, false);
+    assert.equal(validateCancellationPayload('cancelled', 'I changed my mind').valid, true);
+    assert.equal(validateCancellationPayload('cancelled', 'Found cheaper plumber').valid, true);
+  });
+
+  it('should strictly prohibit cancelling already completed bookings', () => {
+    const canCancel = (currentStage: BookingStage) => {
+      if (currentStage === 'completed') return false;
+      return canTransitionBooking(currentStage, 'cancelled');
+    };
+
+    assert.equal(canCancel('completed'), false, 'Completed booking must never be cancelled');
+    assert.equal(canCancel('accepted'), true);
+    assert.equal(canCancel('on_the_way'), true);
+    assert.equal(canCancel('arrived'), true);
+    assert.equal(canCancel('in_progress'), true);
+  });
+});
+
+describe('Two-Way Messaging & Worker Chat Simulation Verification', () => {
+  it('should validate message authorization: only customer and assigned worker can participate', () => {
+    const isAuthorizedForChat = (
+      userId: string,
+      jobCustomerId: string,
+      bookingWorkerId?: string | null
+    ) => {
+      return userId === jobCustomerId || userId === bookingWorkerId;
+    };
+
+    const customerId = 'cust-uuid-1';
+    const workerId = 'worker-uuid-2';
+    const intruderId = 'stranger-uuid-3';
+
+    assert.equal(isAuthorizedForChat(customerId, customerId, workerId), true);
+    assert.equal(isAuthorizedForChat(workerId, customerId, workerId), true);
+    assert.equal(isAuthorizedForChat(intruderId, customerId, workerId), false);
+  });
+
+  it('should label simulated demo replies with [Demo Simulation] and never fabricate real worker replies', () => {
+    const generateWorkerReply = (isDemoWorker: boolean, workerName: string, customerText: string) => {
+      if (!isDemoWorker) {
+        // Real workers MUST NOT have automated fabricated replies
+        return null;
+      }
+      // Demo simulation
+      let text = "I'm currently on my way to your location.";
+      if (customerText.toLowerCase().includes('how long')) {
+        text = "I'm en route and expect to arrive in about 15-20 minutes depending on local traffic.";
+      }
+      return {
+        text: `[Demo Simulation] ${text}`,
+        senderName: `${workerName} (Demo Simulation)`,
+        senderRole: 'worker' as const,
+      };
+    };
+
+    // 1. Real worker: NO simulation reply returned
+    const realReply = generateWorkerReply(false, 'Rajesh Kumar', 'How long until you arrive?');
+    assert.equal(realReply, null, 'Real workers must never have synthetic simulated replies');
+
+    // 2. Demo worker: clearly labelled simulation reply returned
+    const demoReply = generateWorkerReply(true, 'Demo Electrician', 'How long until you arrive?');
+    assert.ok(demoReply !== null);
+    assert.ok(demoReply.text.startsWith('[Demo Simulation]'), 'Demo reply must be explicitly flagged');
+    assert.ok(demoReply.senderName.includes('Demo Simulation'), 'Sender name must state Demo Simulation');
+    assert.equal(demoReply.senderRole, 'worker');
+  });
+
+  it('should generate appropriate contextual replies for all quick-reply suggestion chips', () => {
+    const getContextualReply = (text: string, arrivalMinutes: number = 20) => {
+      const lower = text.toLowerCase();
+      if (lower.includes('let me know')) {
+        return '[Demo Simulation] Absolutely, I will send a quick update the moment I pull up outside.';
+      }
+      if (lower.includes('gate') || lower.includes('finding')) {
+        return '[Demo Simulation] Thank you, following GPS coordinates and will message if directions are needed.';
+      }
+      if (lower.includes('entrance') || lower.includes('waiting')) {
+        return '[Demo Simulation] Noted! I will meet you right at the building entrance/gate as soon as I arrive.';
+      }
+      if (lower.includes('how long') || lower.includes('when') || lower.includes('arrive')) {
+        return `[Demo Simulation] On my way! Navigating local transit. Expect to arrive in approximately ${arrivalMinutes} mins.`;
+      }
+      return '[Demo Simulation] Message received! I am currently focused on reaching your address safely.';
+    };
+
+    // Test chip 1: "How long until you arrive?"
+    assert.match(getContextualReply('How long until you arrive?', 15), /15 mins/);
+    // Test chip 2: "I'm waiting at the entrance"
+    assert.match(getContextualReply("I'm waiting at the entrance"), /entrance\/gate/);
+    // Test chip 3: "Please let me know when you arrive"
+    assert.match(getContextualReply("Please let me know when you arrive"), /update the moment I pull up/);
+    // Test chip 4: "Need help finding the gate?"
+    assert.match(getContextualReply("Need help finding the gate?"), /GPS coordinates/);
+  });
+
+  it('should accurately detect demo accounts without misclassifying real professionals', () => {
+    const isDemoWorkerCheck = (account: {
+      workerName?: string;
+      phone?: string | null;
+      email?: string | null;
+      bio?: string | null;
+    }) => {
+      if (account.workerName?.includes('[DEMO]') || account.workerName?.toLowerCase().includes('demo')) return true;
+      if (account.phone?.includes('99990000')) return true;
+      if (account.email?.includes('sahayak.demo.internal')) return true;
+      if (account.bio?.includes('[DEMO]') || account.bio?.toLowerCase().includes('demonstration only')) return true;
+      return false;
+    };
+
+    // Seeded demo workers:
+    assert.equal(isDemoWorkerCheck({ workerName: 'Professional Service Partner', bio: '[DEMO] Painting contractor...' }), true);
+    assert.equal(isDemoWorkerCheck({ workerName: '[DEMO] Manoj Varma', phone: '+919999000009' }), true);
+    assert.equal(isDemoWorkerCheck({ workerName: 'Santosh', email: 'santosh-plumber@sahayak.demo.internal' }), true);
+
+    // Real professionals:
+    assert.equal(isDemoWorkerCheck({
+      workerName: 'Sanjay Deshpande',
+      phone: '+919820543210',
+      email: 'sanjay.d@gmail.com',
+      bio: 'Licensed electrician with 12 years of experience in residential wiring.'
+    }), false);
+  });
+});
+

@@ -202,15 +202,27 @@ export class BookingService {
       dbStatus = 'assigned';
     }
 
+    const nowIso = new Date().toISOString();
+    const updatePayload: Record<string, unknown> = {
+      status: dbStatus,
+      ai_details: {
+        ...aiDetails,
+        booking: updatedBooking,
+      },
+    };
+
+    if (targetStage === 'cancelled') {
+      updatePayload.cancelled_at = nowIso;
+      updatePayload.cancellation_reason = cancellationReason || 'Cancelled by user';
+    } else if (targetStage === 'completed') {
+      updatePayload.completed_at = nowIso;
+    } else if (targetStage === 'in_progress') {
+      updatePayload.started_at = nowIso;
+    }
+
     const { error } = await supabase
       .from('jobs')
-      .update({
-        status: dbStatus,
-        ai_details: {
-          ...aiDetails,
-          booking: updatedBooking,
-        } as any,
-      })
+      .update(updatePayload as any)
       .eq('id', jobId);
 
     if (error) {
@@ -258,12 +270,12 @@ export class BookingService {
       }));
     }
 
-    // Fallback: Read from jobs.ai_details.chat_messages
-    const { data: jobData } = await supabase.from('jobs').select('*').eq('id', jobId).maybeSingle();
+    // Fallback: Read from jobs.ai_details.chat_messages or chatMessages
+    const { data: jobData } = await supabase.from('jobs').select('ai_details').eq('id', jobId).maybeSingle();
     const rawAi = (jobData as { ai_details?: unknown })?.ai_details;
     if (rawAi && typeof rawAi === 'object') {
-      const details = rawAi as { chat_messages?: ChatMessage[] };
-      return details.chat_messages || [];
+      const details = rawAi as { chat_messages?: ChatMessage[]; chatMessages?: ChatMessage[] };
+      return details.chat_messages || details.chatMessages || [];
     }
 
     return [];
@@ -303,10 +315,10 @@ export class BookingService {
       return { success: true, message: newMessage };
     }
 
-    // 2. Persisted fallback: Write to jobs.ai_details.chat_messages
+    // 2. Persisted fallback: Write to jobs.ai_details.chat_messages and chatMessages
     const { data: jobData, error: jobFetchErr } = await supabase
       .from('jobs')
-      .select('*')
+      .select('ai_details')
       .eq('id', jobId)
       .maybeSingle();
 
@@ -316,7 +328,10 @@ export class BookingService {
 
     const rawAi = (jobData as { ai_details?: unknown })?.ai_details;
     const aiDetails = (rawAi && typeof rawAi === 'object' ? rawAi : {}) as Record<string, unknown>;
-    const existingMessages = (aiDetails.chat_messages as ChatMessage[]) || [];
+    const existingMessages =
+      (aiDetails.chat_messages as ChatMessage[]) ||
+      (aiDetails.chatMessages as ChatMessage[]) ||
+      [];
     const updatedMessages = [...existingMessages, newMessage];
 
     const { error: updateErr } = await supabase
@@ -325,6 +340,7 @@ export class BookingService {
         ai_details: {
           ...aiDetails,
           chat_messages: updatedMessages,
+          chatMessages: updatedMessages,
         } as any,
       })
       .eq('id', jobId);

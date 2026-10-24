@@ -8,9 +8,10 @@
 
 import { NextRequest } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { BookingService } from '@/lib/services/booking.service';
-import { BookingState } from '@/types/booking';
+import { BookingState, ChatMessage } from '@/types/booking';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -33,8 +34,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       return apiError('Authentication required to access booking messages.', 401, 'UNAUTHORIZED');
     }
 
+    const admin = getSupabaseAdminClient();
+    const serverClient = admin || supabase!;
+
     // Verify user is either job customer or assigned worker
-    const { data: rawJob, error: jobError } = await supabase!
+    const { data: rawJob, error: jobError } = await serverClient
       .from('jobs')
       .select('*')
       .eq('id', jobId)
@@ -55,7 +59,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       return apiError('You are not authorized to view messages for this booking.', 403, 'FORBIDDEN');
     }
 
-    const messages = await BookingService.fetchMessages(supabase!, jobId);
+    const messages = await BookingService.fetchMessages(serverClient, jobId);
 
     return apiSuccess({
       jobId,
@@ -102,8 +106,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return apiError('Message exceeds maximum length of 1000 characters.', 400, 'MESSAGE_TOO_LONG');
     }
 
+    const admin = getSupabaseAdminClient();
+    const serverClient = admin || supabase!;
+
     // Verify job authorization
-    const { data: rawJob, error: jobError } = await supabase!
+    const { data: rawJob, error: jobError } = await serverClient
       .from('jobs')
       .select('*')
       .eq('id', jobId)
@@ -124,10 +131,71 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return apiError('You are not authorized to post messages on this booking.', 403, 'FORBIDDEN');
     }
 
-    const senderRole = isCustomer ? 'customer' : 'worker';
-    const senderName = isCustomer ? 'Customer' : (booking?.workerName || 'Professional');
+    // Robust Demo Worker Detection
+    let isDemoWorker = Boolean(booking?.isDemoWorker);
+    let workerDisplayName = booking?.workerName || 'Professional Partner';
 
-    const result = await BookingService.postMessage(supabase!, jobId, {
+    if (booking?.workerId && !isDemoWorker) {
+      if (
+        workerDisplayName.includes('[DEMO]') ||
+        workerDisplayName.toLowerCase().includes('demo') ||
+        (booking.workerPhone && booking.workerPhone.includes('99990000'))
+      ) {
+        isDemoWorker = true;
+      } else {
+        const { data: wp } = await serverClient
+          .from('worker_profiles')
+          .select('bio, user_id')
+          .eq('user_id', booking.workerId)
+          .maybeSingle();
+
+        if (wp?.bio && (wp.bio.includes('[DEMO]') || wp.bio.toLowerCase().includes('demonstration only'))) {
+          isDemoWorker = true;
+        }
+
+        if (!isDemoWorker && admin) {
+          const { data: prof } = await admin
+            .from('profiles')
+            .select('full_name, phone, email')
+            .eq('id', booking.workerId)
+            .maybeSingle();
+
+          if (
+            prof?.full_name?.includes('[DEMO]') ||
+            prof?.phone?.includes('99990000') ||
+            prof?.email?.includes('sahayak.demo.internal')
+          ) {
+            isDemoWorker = true;
+            if (prof.full_name) {
+              workerDisplayName = prof.full_name;
+            }
+          }
+        }
+      }
+
+      // If detected as demo worker, update the booking state in ai_details so future checks are instant
+      if (isDemoWorker && booking) {
+        const updatedBookingState = {
+          ...booking,
+          isDemoWorker: true,
+          workerName: workerDisplayName,
+        };
+        await serverClient
+          .from('jobs')
+          .update({
+            ai_details: {
+              ...aiDetails,
+              booking: updatedBookingState,
+            } as any,
+          })
+          .eq('id', jobId);
+      }
+    }
+
+    const senderRole = isCustomer ? 'customer' : 'worker';
+    const senderName = isCustomer ? 'Customer' : workerDisplayName.replace(/^\[DEMO\]\s*/i, '');
+
+    const result = await BookingService.postMessage(serverClient, jobId, {
       jobId,
       senderId: user.id,
       senderRole,
@@ -139,8 +207,98 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return apiError(result.error || 'Failed to save message.', 500, 'PERSISTENCE_FAILED');
     }
 
+    // Contextual demo-reply simulation for demo workers:
+    // When the customer sends a message and the worker is a demo worker,
+    // generate and persist a relevant contextual reply clearly labeled as Demo Simulation.
+    let demoReply: ChatMessage | null = null;
+    if (isCustomer && isDemoWorker) {
+      const lower = text.toLowerCase();
+      let replyContent = '[Demo Simulation] Message received! I am currently focused on reaching your address safely.';
+
+      if (
+        lower.includes('let me know')
+      ) {
+        replyContent = '[Demo Simulation] Absolutely, I will send a quick update the moment I pull up outside.';
+      } else if (
+        lower.includes('finding') ||
+        lower.includes('find the gate')
+      ) {
+        replyContent = '[Demo Simulation] Thank you, following GPS coordinates and will message if directions are needed.';
+      } else if (
+        lower.includes('how long') ||
+        lower.includes('when') ||
+        lower.includes('arrive') ||
+        lower.includes('arrival') ||
+        lower.includes('time') ||
+        lower.includes('minutes') ||
+        lower.includes('reach') ||
+        lower.includes('come fast') ||
+        lower.includes('fast') ||
+        lower.includes('late') ||
+        lower.includes('hurry') ||
+        lower.includes('quick') ||
+        lower.includes('traffic')
+      ) {
+        const estMinutes = booking?.estimatedArrivalMinutes || 15;
+        replyContent = `[Demo Simulation] On my way! Navigating local transit. Expect to arrive in approximately ${estMinutes} mins.`;
+      } else if (
+        lower.includes('entrance') ||
+        lower.includes('gate') ||
+        lower.includes('door') ||
+        lower.includes('waiting') ||
+        lower.includes('building') ||
+        lower.includes('lobby') ||
+        lower.includes('outside') ||
+        lower.includes('stand') ||
+        lower.includes('wing') ||
+        lower.includes('flat') ||
+        lower.includes('tower')
+      ) {
+        replyContent = '[Demo Simulation] Noted! I will meet you right at the building entrance/gate as soon as I arrive.';
+      } else if (
+        lower.includes('valve') ||
+        lower.includes('leak') ||
+        lower.includes('tool') ||
+        lower.includes('material') ||
+        lower.includes('wire') ||
+        lower.includes('switch') ||
+        lower.includes('paint') ||
+        lower.includes('color') ||
+        lower.includes('clean') ||
+        lower.includes('food') ||
+        lower.includes('cook') ||
+        lower.includes('appliance') ||
+        lower.includes('machine') ||
+        lower.includes('check') ||
+        lower.includes('inspect')
+      ) {
+        replyContent = '[Demo Simulation] Understood, I have standard trade tools and materials equipped to inspect that first thing.';
+      } else if (
+        lower.includes('hello') ||
+        lower.includes('hi') ||
+        lower.includes('hey') ||
+        lower.includes('namaste')
+      ) {
+        replyContent = '[Demo Simulation] Namaste! I am on the way to your location now.';
+      }
+
+      const cleanWorkerName = workerDisplayName.replace(/^\[DEMO\]\s*/i, '');
+      const demoPostResult = await BookingService.postMessage(serverClient, jobId, {
+        jobId,
+        senderId: booking?.workerId || '00000000-0000-0000-0000-000000000000',
+        senderRole: 'worker',
+        senderName: `${cleanWorkerName} (Demo Simulation)`,
+        text: replyContent,
+      });
+
+      if (demoPostResult.success && demoPostResult.message) {
+        demoReply = demoPostResult.message;
+      }
+    }
+
     return apiSuccess({
       message: result.message,
+      demoReply,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Internal messaging error.';

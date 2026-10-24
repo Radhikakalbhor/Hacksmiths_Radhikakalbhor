@@ -2,14 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Sparkles, Menu, X, ArrowRight, Briefcase, User, LogOut } from 'lucide-react';
+import { Sparkles, Menu, X, ArrowRight, Briefcase, CalendarClock, User, LogOut } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [activePath, setActivePath] = useState<string>('');
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setActivePath(window.location.pathname);
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return;
 
@@ -58,10 +62,17 @@ export function Navbar() {
           <nav className="hidden md:flex items-center gap-6">
             <Link
               href="/dashboard"
-              className="text-sm font-semibold text-[#0D4A52] hover:text-[#072F35] flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#EBF4F3] transition-colors"
+              className={activePath === '/dashboard' ? "text-sm font-semibold text-[#0D4A52] flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#EBF4F3] transition-colors" : "text-sm font-medium text-[#576563] hover:text-[#0D4A52] flex items-center gap-1.5 transition-colors"}
             >
               <Briefcase className="w-3.5 h-3.5 text-[#217E66]" />
               <span>Marketplace & Jobs</span>
+            </Link>
+            <Link
+              href="/bookings"
+              className={activePath === '/bookings' ? "text-sm font-semibold text-[#0D4A52] flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#EBF4F3] transition-colors" : "text-sm font-medium text-[#576563] hover:text-[#0D4A52] flex items-center gap-1.5 transition-colors"}
+            >
+              <CalendarClock className="w-3.5 h-3.5 text-[#217E66]" />
+              <span>Booking History</span>
             </Link>
             <Link
               href="/#services"
@@ -144,9 +155,16 @@ export function Navbar() {
           <Link
             href="/dashboard"
             onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-md text-base font-semibold text-[#0D4A52] bg-[#EBF4F3]"
+            className={`block px-3 py-2 rounded-md text-base ${activePath === '/dashboard' ? 'font-semibold text-[#0D4A52] bg-[#EBF4F3]' : 'font-medium text-[#152220] hover:bg-[#F3EFE6]'}`}
           >
             Marketplace & Jobs Dashboard
+          </Link>
+          <Link
+            href="/bookings"
+            onClick={() => setMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-md text-base ${activePath === '/bookings' ? 'font-semibold text-[#0D4A52] bg-[#EBF4F3]' : 'font-medium text-[#152220] hover:bg-[#F3EFE6]'}`}
+          >
+            Booking History
           </Link>
           <Link
             href="/#services"

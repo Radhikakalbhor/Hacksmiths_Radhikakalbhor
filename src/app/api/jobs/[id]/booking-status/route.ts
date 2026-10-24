@@ -65,7 +65,13 @@ export async function PATCH(
 
     // Role-specific stage permission guards
     if (payload.targetStage === 'cancelled') {
-      // Both customer and worker can cancel before completion
+      const currentBooking = BookingService.extractBookingState(job);
+      if (job.status === 'completed' || currentBooking?.stage === 'completed') {
+        return apiError('Cannot cancel a service booking that has already been completed.', 400, 'ALREADY_COMPLETED');
+      }
+      if (!payload.cancellationReason || !payload.cancellationReason.trim()) {
+        return apiError('A cancellation reason is required to cancel this booking.', 400, 'REASON_REQUIRED');
+      }
     } else if (['on_the_way', 'arrived'].includes(payload.targetStage)) {
       if (!isWorker && profile.role !== 'admin') {
         return apiError('Only the assigned worker can update transit status.', 403, 'FORBIDDEN');

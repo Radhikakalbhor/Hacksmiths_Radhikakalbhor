@@ -5,6 +5,7 @@
 
 import { NextRequest } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { requireRole } from '@/lib/auth/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { BookingService } from '@/lib/services/booking.service';
@@ -37,6 +38,7 @@ export async function POST(
 
     const payload = body as {
       workerId?: string;
+      workerName?: string;
       offeredPriceInr?: number;
       distanceMeters?: number;
     };
@@ -71,15 +73,17 @@ export async function POST(
       );
     }
 
-    // 2. Fetch Worker Profile
-    const { data: workerProfile, error: workerError } = await supabase!
+    // 2. Fetch Worker Profile using privileged admin client to avoid RLS block on profiles table
+    const adminClient = getSupabaseAdminClient();
+    const serverClient = adminClient || supabase!;
+
+    const { data: workerProfile } = await serverClient
       .from('worker_profiles')
       .select('*, profiles!user_id(*)')
       .eq('user_id', workerId)
       .maybeSingle();
 
-    // Fallback query if joined differently:
-    let workerName = 'Professional Service Partner';
+    let workerName = payload.workerName || 'Professional Service Partner';
     let workerPhone: string | null = null;
     let workerAvatar: string | null = null;
     let workerRating = 5.0;
@@ -91,23 +95,40 @@ export async function POST(
       workerRating = Number(workerProfile.reputation_score || 5.0);
       workerExp = Number(workerProfile.years_experience || 3);
       workerCategory = workerProfile.primary_category || job.category;
+
+      if (workerProfile.bio && (workerProfile.bio.includes('[DEMO]') || workerProfile.bio.toLowerCase().includes('demonstration only'))) {
+        isDemoWorker = true;
+      }
+
       if (workerProfile.profiles) {
-        const p = workerProfile.profiles as { full_name?: string; phone?: string; avatar_url?: string };
+        const p = workerProfile.profiles as { full_name?: string; phone?: string; avatar_url?: string; email?: string };
         workerName = p.full_name || workerName;
         workerPhone = p.phone || null;
         workerAvatar = p.avatar_url || null;
+        if (p.email?.includes('sahayak.demo.internal')) {
+          isDemoWorker = true;
+        }
       }
-    } else {
-      // Query profile directly
-      const { data: p } = await supabase!.from('profiles').select('*').eq('id', workerId).maybeSingle();
+    }
+
+    // Direct profile lookup fallback if joined profiles were null
+    if (adminClient && (!workerProfile || !workerProfile.profiles)) {
+      const { data: p } = await adminClient.from('profiles').select('*').eq('id', workerId).maybeSingle();
       if (p) {
         workerName = p.full_name || workerName;
         workerPhone = p.phone || null;
         workerAvatar = p.avatar_url || null;
+        if (p.email?.includes('sahayak.demo.internal')) {
+          isDemoWorker = true;
+        }
       }
     }
 
-    if (workerName.includes('[DEMO]') || (workerPhone && workerPhone.includes('99990000'))) {
+    if (
+      workerName.includes('[DEMO]') ||
+      workerName.toLowerCase().includes('demo') ||
+      (workerPhone && workerPhone.includes('99990000'))
+    ) {
       isDemoWorker = true;
     }
 
