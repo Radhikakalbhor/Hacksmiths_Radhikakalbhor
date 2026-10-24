@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
+import { EmailOtpType } from '@supabase/supabase-js';
 import { UserRole } from '@/types/database.types';
 
 /**
@@ -55,6 +56,8 @@ export function resolveOAuthRoleAndDestination({
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
+  const tokenHash = requestUrl.searchParams.get('token_hash');
+  const otpType = requestUrl.searchParams.get('type') as EmailOtpType | null;
   const rawRole = requestUrl.searchParams.get('role');
   const redirectParam = requestUrl.searchParams.get('redirect');
   const authError = requestUrl.searchParams.get('error');
@@ -66,7 +69,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(`/login?error=${errorMsg}`, request.url));
   }
 
-  if (!code) {
+  if (!code && !tokenHash) {
     return NextResponse.redirect(new URL('/login?error=missing_oauth_code', request.url));
   }
 
@@ -77,11 +80,24 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 1. Exchange the temporary authorization code for a secure session
-  const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  // 1. Exchange the temporary authorization code (Google OAuth) or verify token hash (email OTP fallback)
+  let sessionData: { user: import('@supabase/supabase-js').User | null } | null = null;
+  let exchangeError: { message: string } | null = null;
+
+  if (code) {
+    const exchangeRes = await supabase.auth.exchangeCodeForSession(code);
+    sessionData = exchangeRes.data;
+    exchangeError = exchangeRes.error;
+  } else if (tokenHash && otpType) {
+    const verifyRes = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: otpType });
+    sessionData = verifyRes.data;
+    exchangeError = verifyRes.error;
+  } else {
+    return NextResponse.redirect(new URL('/login?error=invalid_auth_parameters', request.url));
+  }
 
   if (exchangeError || !sessionData?.user) {
-    console.error('[OAuth Callback] Code exchange error:', exchangeError?.message);
+    console.error('[OAuth Callback] Code exchange / verify error:', exchangeError?.message);
     const errorMsg = encodeURIComponent(exchangeError?.message || 'Failed to exchange authorization code');
     return NextResponse.redirect(new URL(`/login?error=${errorMsg}`, request.url));
   }

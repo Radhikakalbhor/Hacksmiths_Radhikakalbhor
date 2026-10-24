@@ -20,7 +20,11 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { SERVICE_CATEGORIES } from '@/lib/config/constants';
-import { validateIndianPhoneNumber } from '@/lib/validations/auth';
+import {
+  validateIndianPhoneNumber,
+  validateEmail,
+  validateNumericOtp,
+} from '@/lib/validations/auth';
 
 function LoginContent() {
   const router = useRouter();
@@ -37,6 +41,9 @@ function LoginContent() {
   const [password, setPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  const [otpRequestedAt, setOtpRequestedAt] = useState<number | null>(null);
+  const [otpRequestedEmail, setOtpRequestedEmail] = useState<string>('');
+  const SUPABASE_OTP_LENGTH = 8;
 
   // Worker onboarding registration fields
   const [fullName, setFullName] = useState('');
@@ -130,11 +137,12 @@ function LoginContent() {
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMsg(null);
     setSuccessMsg(null);
 
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
+    if (!cleanEmail || !validateEmail(cleanEmail)) {
       setErrorMsg('Please enter a valid email address.');
       return;
     }
@@ -159,10 +167,15 @@ function LoginContent() {
     setLoading(true);
 
     try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const targetRedirect = redirectTo || (role === 'worker' ? '/dashboard?role=worker' : '/dashboard');
+      const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
+
       const { error } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: {
           shouldCreateUser: true,
+          emailRedirectTo: callbackUrl,
           data: isRegisteringWorker
             ? {
                 full_name: fullName.trim(),
@@ -180,17 +193,27 @@ function LoginContent() {
       });
 
       if (error) {
-        if (error.message.includes('rate limit')) {
+        const errorText = error.message.toLowerCase();
+        if (errorText.includes('rate limit') || (error as { status?: number }).status === 429) {
           setErrorMsg(
-            'Email rate limit reached for this Supabase project. Please use "Continue with Google" above or switch to Password login.'
+            'Email rate limit reached for Supabase Auth. Please wait a few minutes before requesting another code, or continue with Google.'
+          );
+        } else if (errorText.includes('provider') || errorText.includes('not enabled') || errorText.includes('disabled')) {
+          setErrorMsg(
+            'Email authentication is not enabled or restricted in your Supabase Auth configuration.'
           );
         } else {
           setErrorMsg(error.message);
         }
       } else {
         setOtpSent(true);
+        setOtpCode('');
         setCooldown(60);
-        setSuccessMsg(`A one-time verification link or 6-digit code has been sent to ${cleanEmail}.`);
+        setOtpRequestedAt(Date.now());
+        setOtpRequestedEmail(cleanEmail);
+        setSuccessMsg(
+          `An 8-digit numeric verification code has been requested for ${cleanEmail}. Please check your inbox and enter all 8 digits below.`
+        );
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'An unexpected error occurred sending OTP.');
@@ -201,12 +224,26 @@ function LoginContent() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setErrorMsg('Email address is missing. Please re-enter your email.');
+      setOtpSent(false);
+      return;
+    }
+
+    if (otpRequestedEmail && cleanEmail !== otpRequestedEmail) {
+      setErrorMsg('The email address has changed. Please request a new verification code for this email.');
+      setOtpSent(false);
+      return;
+    }
+
     const cleanCode = otpCode.trim();
-    if (!cleanCode || cleanCode.length < 6) {
-      setErrorMsg('Please enter the full 6-digit OTP code.');
+    if (!validateNumericOtp(cleanCode, SUPABASE_OTP_LENGTH)) {
+      setErrorMsg(`Please enter the full ${SUPABASE_OTP_LENGTH}-digit numeric verification code.`);
       return;
     }
 
@@ -217,22 +254,100 @@ function LoginContent() {
 
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         token: cleanCode,
         type: 'email',
       });
 
       if (error) {
-        setErrorMsg(error.message);
-      } else if (data.session) {
-        setSuccessMsg('Authentication verified successfully! Redirecting...');
-        setTimeout(() => {
-          router.push(redirectTo);
-          router.refresh();
-        }, 1000);
-      } else {
-        setErrorMsg('Verification completed but no active session was returned. Please try logging in.');
+        const errorText = error.message.toLowerCase();
+        const errorCode = (error as { code?: string }).code || '';
+        const elapsedMs = otpRequestedAt ? Date.now() - otpRequestedAt : 0;
+        // Supabase OTP default validity is 10 to 60 minutes
+        const isTimeExpired = elapsedMs > 10 * 60 * 1000;
+
+        if (errorText.includes('rate limit') || (error as { status?: number }).status === 429) {
+          setErrorMsg('Too many verification attempts. Please wait a few minutes before retrying.');
+        } else if (errorText.includes('network') || errorText.includes('failed to fetch') || errorText.includes('fetch failed')) {
+          setErrorMsg('Network error connecting to authentication service. Please check your internet connection.');
+        } else if (errorCode === 'otp_expired' || errorText.includes('expired') || errorText.includes('invalid')) {
+          if (isTimeExpired) {
+            setErrorMsg('The verification code has expired. Please click "Resend Code" to receive a fresh code.');
+          } else {
+            setErrorMsg('Invalid verification code. Please check your email and make sure you entered all 8 digits correctly.');
+          }
+        } else {
+          setErrorMsg(error.message);
+        }
+        return;
       }
+
+      if (!data.session || !data.user) {
+        setErrorMsg('Verification succeeded but no active session was returned. Please try logging in again.');
+        return;
+      }
+
+      const user = data.user;
+
+      // Zero-trust role determination: Query existing profile first
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const finalRole: 'customer' | 'worker' =
+        existingProfile?.role === 'worker' || existingProfile?.role === 'customer'
+          ? existingProfile.role
+          : role === 'worker'
+          ? 'worker'
+          : 'customer';
+
+      if (!existingProfile) {
+        const fullNameVal =
+          fullName.trim() ||
+          user.user_metadata?.full_name ||
+          user.email?.split('@')[0] ||
+          (finalRole === 'worker' ? 'Sahayak Partner' : 'Sahayak Customer');
+        const phoneVal =
+          phoneNumber.trim() ||
+          user.phone ||
+          user.user_metadata?.phone ||
+          `email_${user.id.replace(/-/g, '').slice(0, 10)}`;
+
+        await supabase.from('profiles').insert({
+          id: user.id,
+          email: user.email || cleanEmail,
+          phone: phoneVal,
+          full_name: fullNameVal,
+          avatar_url: user.user_metadata?.avatar_url || null,
+          role: finalRole,
+          verification_status: 'unverified',
+          primary_city: 'Delhi NCR',
+        });
+
+        if (finalRole === 'worker') {
+          await supabase.from('worker_profiles').insert({
+            user_id: user.id,
+            primary_category: primaryCategory || 'plumbing',
+            skills: ['general'],
+            bio: bio.trim() || 'Partner registered via Email OTP',
+            years_experience: parseInt(yearsExperience, 10) || 1,
+            is_available: true,
+            is_publicly_visible: false,
+          });
+        }
+      }
+
+      setSuccessMsg('Authentication verified successfully! Establishing session and redirecting...');
+
+      const targetDestination =
+        finalRole === 'worker' ? '/dashboard?role=worker' : redirectTo || '/dashboard';
+
+      setTimeout(() => {
+        router.push(targetDestination);
+        router.refresh();
+      }, 800);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to verify OTP code.');
     } finally {
@@ -645,7 +760,16 @@ function LoginContent() {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (otpSent) {
+                      setOtpSent(false);
+                      setOtpCode('');
+                      setOtpRequestedAt(null);
+                      setOtpRequestedEmail('');
+                      setErrorMsg(null);
+                    }
+                  }}
                   placeholder="name@example.com"
                   className="w-full pl-9 pr-3 py-2.5 text-xs rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none"
                 />
@@ -655,45 +779,59 @@ function LoginContent() {
             <Button
               type="submit"
               variant="primary"
-              className="w-full justify-center gap-2 py-2.5 text-xs"
+              className="w-full justify-center gap-2 py-2.5 text-xs font-semibold"
               disabled={loading}
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Sending Code...</span>
+                  <span>Requesting OTP...</span>
                 </>
               ) : (
                 <>
                   <KeyRound className="w-4 h-4" />
-                  <span>Send One-Time Verification Code</span>
+                  <span>Get OTP</span>
                 </>
               )}
             </Button>
           </form>
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-[#152220]">
-                  Enter 6-Digit OTP Code
+                  Enter 8-Digit OTP Code
                 </label>
                 <button
                   type="button"
-                  onClick={() => setOtpSent(false)}
-                  className="text-[11px] text-[#0D4A52] underline"
+                  onClick={() => {
+                    setOtpSent(false);
+                    setOtpCode('');
+                    setOtpRequestedAt(null);
+                    setOtpRequestedEmail('');
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                  }}
+                  className="text-[11px] text-[#0D4A52] underline font-semibold hover:text-[#217E66]"
                 >
                   Change Email
                 </button>
               </div>
+              <p className="text-[11px] text-[#576563]">
+                Enter the 8-digit numeric verification code requested for{' '}
+                <span className="font-semibold text-[#152220]">{email}</span>.
+              </p>
               <input
                 type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
                 required
                 maxLength={8}
                 value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value)}
-                placeholder="123456"
-                className="w-full p-3 text-center text-lg tracking-widest font-mono rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none font-bold"
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                placeholder="••••••••"
+                className="w-full p-3 text-center text-xl tracking-[0.4em] font-mono rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none font-bold placeholder:tracking-normal placeholder:text-gray-300"
               />
             </div>
 
@@ -711,10 +849,14 @@ function LoginContent() {
               </button>
             </div>
 
+            <p className="text-[11px] text-[#83928E] text-center">
+              Verification codes expire according to Supabase OTP expiry settings (typically 10–60 minutes). Resend is available every 60 seconds.
+            </p>
+
             <Button
               type="submit"
               variant="primary"
-              className="w-full justify-center gap-2 py-2.5 text-xs"
+              className="w-full justify-center gap-2 py-2.5 text-xs font-semibold"
               disabled={loading}
             >
               {loading ? (

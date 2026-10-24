@@ -16,9 +16,33 @@ export function validateIndianPhoneNumber(phone: string): boolean {
   return indianPhoneRegex.test(cleaned);
 }
 
+export function validateEmail(email: string): boolean {
+  // Standard RFC-compliant email format check
+  const cleaned = email.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(cleaned);
+}
+
+export function validateNumericOtp(code: string, expectedLength: number = 8): boolean {
+  // Validates exact configured numeric digit length (8 digits by default for this Supabase project, or 6 if configured)
+  const cleaned = code.trim();
+  if (expectedLength === 8) {
+    return /^\d{8}$/.test(cleaned);
+  }
+  if (expectedLength === 6) {
+    return /^\d{6}$/.test(cleaned);
+  }
+  return /^(?:\d{6}|\d{8})$/.test(cleaned);
+}
+
+export function validateEmailOtpCode(code: string): boolean {
+  // Validates that the OTP code is a valid complete Supabase numeric token (6 or 8 digits)
+  return /^(?:\d{6}|\d{8})$/.test(code.trim());
+}
+
 export function validateOtpCode(code: string): boolean {
-  // 4 to 6 digit numeric code
-  return /^\d{4,6}$/.test(code.trim());
+  // 4 to 8 digit numeric code for general backward compatibility
+  return /^\d{4,8}$/.test(code.trim());
 }
 
 export function validateCustomerSignup(input: {
