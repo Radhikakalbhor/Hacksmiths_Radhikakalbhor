@@ -7,7 +7,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { Database } from '@/types/database.types';
 
-export async function getSupabaseServerClient() {
+export async function getSupabaseServerClient(request?: Request | null) {
   const cookieStore = await cookies();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -16,7 +16,12 @@ export async function getSupabaseServerClient() {
     return null;
   }
 
+  const authHeader = request ? request.headers.get('authorization') : null;
+
   return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: authHeader ? { Authorization: authHeader } : undefined,
+    },
     cookies: {
       getAll() {
         return cookieStore.getAll();

@@ -9,7 +9,7 @@ import { requireAuth } from '@/lib/auth/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -19,7 +19,7 @@ export async function GET(
       return apiError('Job ID parameter is required.', 400, 'BAD_REQUEST');
     }
 
-    const supabase = await getSupabaseServerClient();
+    const supabase = await getSupabaseServerClient(request);
     const authResult = await requireAuth(supabase);
 
     if (!authResult.success) {

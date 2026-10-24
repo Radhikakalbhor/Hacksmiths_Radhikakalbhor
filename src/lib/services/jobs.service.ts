@@ -25,15 +25,17 @@ export class JobsService {
    * Prepares a typed database insert object with PostGIS spatial point for Supabase.
    */
   static prepareJobInsert(customerId: string, input: CreateJobInput): JobInsert {
+    // Format as PostGIS WKT (Well-Known Text) point: POINT(longitude latitude)
+    const pointWkt = `POINT(${input.longitude} ${input.latitude})`;
     return {
       customer_id: customerId,
       category: input.category,
       title: input.title,
       description: input.description,
       urgency: input.urgency,
-      status: 'POSTED',
-      // Format as WKT (Well-Known Text) point: POINT(longitude latitude)
-      location_point: `POINT(${input.longitude} ${input.latitude})`,
+      status: (input as { status?: JobStatus }).status ?? 'BIDDING_OPEN',
+      location_point: pointWkt,
+      service_location: pointWkt,
       address_line: input.addressLine,
       landmark: input.landmark ?? null,
       city: input.city,
@@ -53,6 +55,7 @@ export class JobsService {
       job_id: input.jobId,
       worker_id: input.workerId,
       offered_amount_inr: input.offeredAmountInr,
+      proposed_amount: input.offeredAmountInr,
       labor_cost_inr: input.laborCostInr,
       materials_estimate_inr: input.materialsEstimateInr ?? 0,
       visitation_fee_inr: input.visitationFeeInr ?? 0,

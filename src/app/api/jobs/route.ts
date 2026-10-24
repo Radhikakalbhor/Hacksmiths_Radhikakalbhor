@@ -14,7 +14,7 @@ import { JobStatus } from '@/types/database.types';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    const supabase = await getSupabaseServerClient(request);
     const authResult = await requireRole(supabase, ['customer']);
 
     if (!authResult.success) {
@@ -61,19 +61,85 @@ export async function POST(request: NextRequest) {
     const jobPayload = JobsService.prepareJobInsert(user.id, jobInput);
 
     if (benchmarkEstimate) {
-      jobPayload.estimated_min_price_inr = jobInput.estimatedMinPriceInr ?? benchmarkEstimate.min;
+      jobPayload.estimated_min_price_inr = jobInput.estimatedMinPriceInr ?? jobInput.estimatedBudgetInr ?? benchmarkEstimate.min;
       jobPayload.estimated_max_price_inr = jobInput.estimatedMaxPriceInr ?? benchmarkEstimate.max;
     }
 
-    const { data: job, error: insertError } = await supabase!
+    // Enforce database check constraint: estimated_max_price_inr >= estimated_min_price_inr
+    if (
+      jobPayload.estimated_min_price_inr != null &&
+      jobPayload.estimated_max_price_inr != null &&
+      Number(jobPayload.estimated_max_price_inr) < Number(jobPayload.estimated_min_price_inr)
+    ) {
+      jobPayload.estimated_max_price_inr = jobPayload.estimated_min_price_inr;
+    }
+
+    // Insert using the authenticated user client under strict Row Level Security (RLS)
+    let { data: job, error: insertError } = await supabase!
       .from('jobs')
       .insert(jobPayload)
       .select('*')
       .single();
 
+    // Check constraint fallback: If jobs_status_check constraint rejects initial status, attempt alternate permitted status
+    if (
+      insertError &&
+      insertError.code === '23514' &&
+      (insertError.message?.includes('jobs_status_check') || insertError.details?.includes('jobs_status_check'))
+    ) {
+      console.warn('[POST /api/jobs] Check constraint jobs_status_check triggered. Attempting fallback permitted status...');
+      const fallbackStatus = jobPayload.status === 'BIDDING_OPEN' ? 'POSTED' : 'BIDDING_OPEN';
+      const fallbackPayload = { ...jobPayload, status: fallbackStatus as JobStatus };
+      const fallbackResult = await supabase!
+        .from('jobs')
+        .insert(fallbackPayload)
+        .select('*')
+        .single();
+
+      if (!fallbackResult.error) {
+        job = fallbackResult.data;
+        insertError = null;
+      } else {
+        // As a final fallback, omit status completely to let the database DEFAULT apply
+        const defaultPayload = { ...jobPayload };
+        delete defaultPayload.status;
+        const defaultResult = await supabase!
+          .from('jobs')
+          .insert(defaultPayload)
+          .select('*')
+          .single();
+        if (!defaultResult.error) {
+          job = defaultResult.data;
+          insertError = null;
+        }
+      }
+    }
+
     if (insertError) {
-      console.error('[POST /api/jobs] Insert error:', insertError.message);
-      return apiError('Failed to create job in database.', 500, 'DATABASE_ERROR', insertError.message);
+      console.error('[POST /api/jobs] Authenticated client insert failed:', {
+        code: insertError.code,
+        message: insertError.message,
+        details: insertError.details,
+        hint: insertError.hint,
+      });
+
+      const errorDetail = insertError.message || 'Database rejected job insertion.';
+      const errorCode = insertError.code;
+      const devMessage = errorCode
+        ? `Failed to create job in database: ${errorDetail} (${errorCode})`
+        : `Failed to create job in database: ${errorDetail}`;
+
+      return apiError(
+        devMessage,
+        500,
+        errorCode || 'DATABASE_ERROR',
+        {
+          code: errorCode,
+          message: errorDetail,
+          details: insertError.details,
+          hint: insertError.hint,
+        }
+      );
     }
 
     return apiSuccess(
@@ -91,7 +157,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
+    const supabase = await getSupabaseServerClient(request);
     const authResult = await requireAuth(supabase);
 
     if (!authResult.success) {

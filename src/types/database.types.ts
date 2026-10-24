@@ -151,6 +151,7 @@ export interface Database {
           urgency: JobUrgency;
           status: JobStatus;
           location_point: unknown;
+          service_location: unknown;
           address_line: string;
           landmark: string | null;
           city: string;
@@ -173,7 +174,8 @@ export interface Database {
           description: string;
           urgency?: JobUrgency;
           status?: JobStatus;
-          location_point: unknown;
+          location_point?: unknown;
+          service_location?: unknown;
           address_line: string;
           landmark?: string | null;
           city: string;
@@ -195,6 +197,7 @@ export interface Database {
           urgency?: JobUrgency;
           status?: JobStatus;
           location_point?: unknown;
+          service_location?: unknown;
           address_line?: string;
           landmark?: string | null;
           city?: string;
@@ -236,6 +239,7 @@ export interface Database {
           job_id: string;
           worker_id: string;
           offered_amount_inr: number;
+          proposed_amount?: number;
           labor_cost_inr: number;
           materials_estimate_inr: number;
           visitation_fee_inr: number;
@@ -250,6 +254,7 @@ export interface Database {
           job_id: string;
           worker_id: string;
           offered_amount_inr: number;
+          proposed_amount?: number;
           labor_cost_inr?: number;
           materials_estimate_inr?: number;
           visitation_fee_inr?: number;
@@ -261,6 +266,7 @@ export interface Database {
         };
         Update: {
           offered_amount_inr?: number;
+          proposed_amount?: number;
           labor_cost_inr?: number;
           materials_estimate_inr?: number;
           visitation_fee_inr?: number;

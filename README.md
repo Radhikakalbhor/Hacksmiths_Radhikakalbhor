@@ -131,7 +131,55 @@ In your Supabase Dashboard, open the **SQL Editor** and run the migration files 
 2. `supabase/migrations/20261024000002_row_level_security.sql` (RLS policies & privilege escalation guards)
 3. `supabase/migrations/20261024000003_postgis_nearby_workers.sql` (Spatial discovery & OTP verification RPCs)
 4. `supabase/migrations/20261024000004_atomic_marketplace_operations.sql` (Atomic bid acceptance & race condition guard)
-5. `supabase/seed.sql` (Illustrative demo price benchmarks)
+### 7. Seeding the Hackathon Demo Dataset (Fictional Mumbai Cluster)
+To prepare Sahayak for an interactive hackathon evaluation or live demo:
+
+#### Step 1: Run the Official Node.js Seed Script
+In your project terminal, execute:
+```bash
+node scripts/seed-demo.mjs
+```
+*Prerequisite:* Ensure your `.env.local` contains `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (from Supabase Dashboard -> Project Settings -> API).
+This script uses the official **Supabase Auth Admin API** to safely create or reuse 13 demo accounts (`@sahayak.demo.internal`) without raw SQL user fabrication, then upserts the profiles, worker profiles, price benchmarks, and sample activity.
+
+#### Step 2 (Alternative / Refresh via SQL): Run `supabase/seed_demo_data.sql`
+If you prefer running the database updates via the **Supabase SQL Editor**:
+1. Open your **Supabase Dashboard** -> **SQL Editor**.
+2. Open [`supabase/seed_demo_data.sql`](file:///supabase/seed_demo_data.sql).
+3. Copy the entire contents, paste it into the editor, and click **Run**.
+*(Note: It safely checks that demo auth users exist before proceeding).*
+
+**What this seeds:**
+- **12 Fictional Blue-Collar Workers** clustered around Mumbai (Plumbing: 3, Electrical: 2, Deep Cleaning: 2, Carpentry: 1, Painting: 1, Appliance Repair: 1, Cooking: 1, House Help: 1).
+- **PostGIS Geographic Coordinates** for Bandra, Dadar, Andheri, Kurla, Powai, Worli, Juhu, Malad, Goregaon, Borivali, Ghatkopar, and Chembur.
+- **Micro-Market Price Benchmarks** for all 8 trade categories across Mumbai and Delhi NCR.
+- **1 Sample Completed Job & 5-Star Customer Review** for the top plumber to demonstrate completed marketplace transactions.
+
+**Safety & Verification Guarantees:**
+- **No False Verification Claims:** `government_id_verified = false`, `background_check_verified = false`, and `verification_status = 'unverified'`.
+- **100% Fictional Data:** All demo profiles are prefixed with `[DEMO]`, use synthetic non-routable phone numbers (`+919999000001`...), and dummy internal emails (`@sahayak.demo.internal`).
+- **Strictly Idempotent:** Safe to rerun multiple times without creating duplicates. Uses deterministic IDs and `ON CONFLICT` updates.
+- **Zero Impact on Real Users:** Does not modify or delete existing customer or worker accounts.
+
+**How to Test a Plumber Search in Mumbai:**
+1. Navigate to `/post-job`.
+2. Notice the **Transparent Price Matrix** card automatically fetching the Bandra/Mumbai benchmark (₹250–₹750, Typical: ₹450).
+3. Select **Plumbing**, fill in title and description, and enter address (e.g., `Perry Cross Road, Bandra West, Mumbai`, Pincode `400050`).
+4. Click **Use GPS Location** or enter coordinates (`19.0596` Lat, `72.8295` Lng).
+5. Click **Post Service Request**.
+6. The app stores the request using permitted marketplace status (`BIDDING_OPEN`) and redirects to `/jobs/[id]`.
+7. The PostGIS spatial engine scans the radius and displays the 3 nearby demo plumbers:
+   - **Ramesh Kumar [DEMO]** (~0.0 km in Bandra West)
+   - **Santosh Shinde [DEMO]** (~5.0 km in Dadar West)
+   - **Ganesh Patil [DEMO]** (~7.0 km in Andheri East)
+8. Click **View Professional Profile** on any worker to view their experience and skills.
+
+**How to Safely Remove Demo Data:**
+To remove ONLY the records created by this demo seed without touching any other data:
+```bash
+node scripts/teardown-demo.mjs
+```
+Or run the targeted teardown block at the bottom of [`supabase/seed_demo_data.sql`](file:///supabase/seed_demo_data.sql) in Supabase SQL Editor.
 
 ---
 

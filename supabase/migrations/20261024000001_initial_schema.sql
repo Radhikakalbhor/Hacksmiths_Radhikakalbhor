@@ -169,6 +169,7 @@ ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS urgency job_urgency DEFAULT 'standard';
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS status job_status DEFAULT 'POSTED';
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS location_point geography(POINT, 4326);
+ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS service_location geography(POINT, 4326);
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS address_line TEXT;
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS landmark TEXT;
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS city TEXT;
@@ -181,6 +182,7 @@ ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS scheduled_time_slot TEXT;
 
 -- Spatial & query indexes on jobs
 CREATE INDEX IF NOT EXISTS idx_jobs_location_point ON public.jobs USING GIST (location_point);
+CREATE INDEX IF NOT EXISTS idx_jobs_service_location ON public.jobs USING GIST (service_location);
 CREATE INDEX IF NOT EXISTS idx_jobs_status_category ON public.jobs (status, category);
 CREATE INDEX IF NOT EXISTS idx_jobs_customer ON public.jobs (customer_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_worker ON public.jobs (selected_worker_id);
@@ -206,6 +208,7 @@ CREATE TABLE IF NOT EXISTS public.bids (
 ALTER TABLE public.bids ADD COLUMN IF NOT EXISTS job_id UUID REFERENCES public.jobs(id) ON DELETE CASCADE;
 ALTER TABLE public.bids ADD COLUMN IF NOT EXISTS worker_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE;
 ALTER TABLE public.bids ADD COLUMN IF NOT EXISTS offered_amount_inr NUMERIC(10, 2);
+ALTER TABLE public.bids ADD COLUMN IF NOT EXISTS proposed_amount NUMERIC(10, 2);
 ALTER TABLE public.bids ADD COLUMN IF NOT EXISTS labor_cost_inr NUMERIC(10, 2) DEFAULT 0;
 ALTER TABLE public.bids ADD COLUMN IF NOT EXISTS materials_estimate_inr NUMERIC(10, 2) DEFAULT 0;
 ALTER TABLE public.bids ADD COLUMN IF NOT EXISTS visitation_fee_inr NUMERIC(10, 2) DEFAULT 0;

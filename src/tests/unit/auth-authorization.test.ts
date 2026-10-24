@@ -122,4 +122,90 @@ describe('Server Authentication & Authorization Helpers', () => {
       assert.equal(json.code, 'FORBIDDEN_ROLE');
     }
   });
+
+  it('should auto-provision Google OAuth customer and authorize job posting with correct customer ID', async () => {
+    const googleUser = {
+      id: 'google-usr-999',
+      email: 'customer@gmail.com',
+      user_metadata: {
+        full_name: 'Radhika Kalbhor',
+        role: 'customer',
+      },
+    };
+
+    let tableInsertedPayload: unknown = null;
+
+    const mockSupabaseGoogleUser = {
+      auth: {
+        getUser: async () => ({ data: { user: googleUser }, error: null }),
+      },
+      from: (tableName: string) => {
+        assert.equal(tableName, 'profiles');
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: null }), // Initially missing profile
+            }),
+          }),
+          upsert: (payload: unknown) => {
+            tableInsertedPayload = payload;
+            return {
+              select: () => ({
+                maybeSingle: async () => ({
+                  data: {
+                    ...(payload as object),
+                    id: googleUser.id,
+                    role: 'customer',
+                    full_name: 'Radhika Kalbhor',
+                  },
+                  error: null,
+                }),
+              }),
+            };
+          },
+        };
+      },
+    } as unknown as SupabaseClient<Database>;
+
+    const result = await requireRole(mockSupabaseGoogleUser, ['customer']);
+    assert.equal(result.success, true);
+    if (result.success) {
+      assert.equal(result.context.user.id, 'google-usr-999');
+      assert.equal(result.context.profile.role, 'customer');
+      assert.equal(result.context.profile.full_name, 'Radhika Kalbhor');
+      assert.ok(tableInsertedPayload);
+    }
+  });
+
+  it('should return 500 DATABASE_ERROR when profile query encounters a database permission failure', async () => {
+    const activeUser = { id: 'usr-permission-err', email: 'test@example.com' };
+
+    const mockSupabasePermError = {
+      auth: {
+        getUser: async () => ({ data: { user: activeUser }, error: null }),
+      },
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: null,
+              error: {
+                code: '42501',
+                message: 'permission denied for table profiles',
+              },
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient<Database>;
+
+    const result = await requireAuth(mockSupabasePermError);
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.equal(result.response.status, 500);
+      const json = await result.response.json();
+      assert.equal(json.code, 'DATABASE_ERROR');
+      assert.match(json.error, /permission denied for table profiles/);
+    }
+  });
 });

@@ -19,7 +19,7 @@ export async function POST(
       return apiError('Job ID parameter is required.', 400, 'BAD_REQUEST');
     }
 
-    const supabase = await getSupabaseServerClient();
+    const supabase = await getSupabaseServerClient(request);
     const authResult = await requireRole(supabase, ['customer']);
 
     if (!authResult.success) {

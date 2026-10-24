@@ -50,4 +50,24 @@ describe('Job Lifecycle State Machine', () => {
     assert.equal(canTransitionJob('IN_PROGRESS', 'DISPUTED'), true);
     assert.equal(canTransitionJob('DRAFT', 'DISPUTED'), false);
   });
+
+  it('should correctly format PostGIS service_location and location_point on job insert', () => {
+    const payload = JobsService.prepareJobInsert('00000000-0000-0000-0000-000000000001', {
+      category: 'plumbing',
+      title: 'Fix Leaking Bathroom Pipe',
+      description: 'Severe pipe leakage under wash basin needs emergency replacement.',
+      urgency: 'emergency',
+      latitude: 28.6139,
+      longitude: 77.209,
+      addressLine: 'Connaught Place Block B',
+      city: 'Delhi NCR',
+      pincode: '110001',
+      estimatedBudgetInr: 600,
+    });
+
+    assert.equal(payload.service_location, 'POINT(77.209 28.6139)');
+    assert.equal(payload.location_point, 'POINT(77.209 28.6139)');
+    assert.equal(payload.customer_id, '00000000-0000-0000-0000-000000000001');
+    assert.equal(payload.status, 'BIDDING_OPEN');
+  });
 });

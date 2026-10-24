@@ -39,22 +39,68 @@ export class PricingService {
     city: string,
     microMarketArea: string
   ): Promise<BenchmarkRow | null> {
-    const { data, error } = await supabase
+    const catLower = category.toLowerCase().trim();
+    const cityPrefix = (city || 'Mumbai').split(' ')[0];
+
+    // 1. Direct exact or substring match if microMarketArea is short
+    if (microMarketArea && microMarketArea.trim().length > 0 && microMarketArea.trim().length < 30) {
+      const { data } = await supabase
+        .from('price_benchmarks')
+        .select('*')
+        .eq('category', catLower)
+        .ilike('city', `%${cityPrefix}%`)
+        .ilike('micro_market_area', `%${microMarketArea.trim()}%`)
+        .order('sample_size', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) return data;
+    }
+
+    // 2. Keyword match: check individual locality tokens (e.g. "Bandra", "Dadar", "Powai", "Andheri", "Worli")
+    if (microMarketArea) {
+      const tokens = microMarketArea
+        .split(/[,.\s/]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 4);
+
+      for (const token of tokens) {
+        const { data } = await supabase
+          .from('price_benchmarks')
+          .select('*')
+          .eq('category', catLower)
+          .ilike('city', `%${cityPrefix}%`)
+          .ilike('micro_market_area', `%${token}%`)
+          .order('sample_size', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data) return data;
+      }
+    }
+
+    // 3. City-level default benchmark fallback
+    const { data: defaultCityBenchmark } = await supabase
       .from('price_benchmarks')
       .select('*')
-      .eq('category', category.toLowerCase())
-      .eq('city', city)
-      .ilike('micro_market_area', `%${microMarketArea}%`)
+      .eq('category', catLower)
+      .ilike('city', `%${cityPrefix}%`)
       .order('sample_size', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      console.error('[PricingService] Error fetching benchmark:', error.message);
-      return null;
-    }
+    if (defaultCityBenchmark) return defaultCityBenchmark;
 
-    return data;
+    // 4. Global category benchmark fallback
+    const { data: globalBenchmark } = await supabase
+      .from('price_benchmarks')
+      .select('*')
+      .eq('category', catLower)
+      .order('sample_size', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return globalBenchmark ?? null;
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Sparkles,
@@ -15,6 +15,10 @@ import {
   Navigation,
   Info,
   Briefcase,
+  User,
+  Compass,
+  ShieldCheck,
+  MapPin,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -76,15 +80,88 @@ function PostJobForm() {
   const [pincode, setPincode] = useState(() => initialDraft.pincode || '110001');
   const [latitude, setLatitude] = useState<number | null>(() => initialDraft.latitude ?? null);
   const [longitude, setLongitude] = useState<number | null>(() => initialDraft.longitude ?? null);
+  const [showManualCoords, setShowManualCoords] = useState(false);
   const [estimatedBudgetInr, setEstimatedBudgetInr] = useState(() => initialDraft.estimatedBudgetInr || '');
+
+  // Local Micro-Market Pricing Benchmark
+  const [benchmark, setBenchmark] = useState<{
+    min: number;
+    median: number;
+    max: number;
+    area: string;
+  } | null>(null);
+  const [loadingBenchmark, setLoadingBenchmark] = useState(false);
+
+  // Fetch neighborhood pricing benchmark when category or city changes
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchBenchmark = async () => {
+      try {
+        setLoadingBenchmark(true);
+        const supabase = getSupabaseBrowserClient();
+        if (!supabase) return;
+
+        const cityPrefix = city.split(' ')[0] || city;
+        const { data: areaData } = await supabase
+          .from('price_benchmarks')
+          .select('min_price_inr, median_price_inr, max_price_inr, micro_market_area')
+          .eq('category', category.toLowerCase())
+          .ilike('city', `%${cityPrefix}%`)
+          .order('sample_size', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!isCancelled && areaData) {
+          setBenchmark({
+            min: Number(areaData.min_price_inr),
+            median: Number(areaData.median_price_inr),
+            max: Number(areaData.max_price_inr),
+            area: areaData.micro_market_area,
+          });
+          return;
+        }
+
+        const { data: genData } = await supabase
+          .from('price_benchmarks')
+          .select('min_price_inr, median_price_inr, max_price_inr, micro_market_area')
+          .eq('category', category.toLowerCase())
+          .order('sample_size', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!isCancelled && genData) {
+          setBenchmark({
+            min: Number(genData.min_price_inr),
+            median: Number(genData.median_price_inr),
+            max: Number(genData.max_price_inr),
+            area: genData.micro_market_area,
+          });
+        } else if (!isCancelled) {
+          setBenchmark(null);
+        }
+      } catch {
+        if (!isCancelled) setBenchmark(null);
+      } finally {
+        if (!isCancelled) setLoadingBenchmark(false);
+      }
+    };
+
+    fetchBenchmark();
+    return () => {
+      isCancelled = true;
+    };
+  }, [category, city]);
 
   // Photo Attachment
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFileName, setPhotoFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const router = useRouter();
+
   // Status & Auth
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [authState, setAuthState] = useState<'loading' | 'signed_out' | 'customer' | 'worker'>('loading');
+  const [customerName, setCustomerName] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -95,23 +172,95 @@ function PostJobForm() {
     status: string;
   } | null>(null);
 
-  // 1. Check user authentication asynchronously
+  // 1. Verify user authentication & profile role
   useEffect(() => {
+    let isCancelled = false;
     const supabase = getSupabaseBrowserClient();
+
     if (!supabase) {
-      const timer = setTimeout(() => setIsAuthenticated(false), 0);
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => {
+        if (!isCancelled) setAuthState('signed_out');
+      }, 0);
+      return () => {
+        isCancelled = true;
+        clearTimeout(timer);
+      };
     }
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setIsAuthenticated(!!user);
-    });
+    const checkAuth = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          if (!isCancelled) setAuthState('signed_out');
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, role, full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (isCancelled) return;
+
+        if (profile) {
+          if (profile.role === 'worker') {
+            setAuthState('worker');
+          } else {
+            setAuthState('customer');
+            setCustomerName(profile.full_name || 'Customer');
+          }
+        } else {
+          // If profile is not yet in public.profiles, check user metadata role
+          const metadataRole = user.user_metadata?.role;
+          if (metadataRole === 'worker') {
+            setAuthState('worker');
+          } else {
+            setAuthState('customer');
+            const name =
+              user.user_metadata?.full_name ||
+              user.user_metadata?.name ||
+              user.email?.split('@')[0] ||
+              'Customer';
+            setCustomerName(name);
+
+            // Client-side auto-provisioning attempt
+            supabase
+              .from('profiles')
+              .upsert(
+                {
+                  id: user.id,
+                  email: user.email || null,
+                  phone: user.phone || `user_${user.id.replace(/-/g, '').slice(0, 10)}`,
+                  full_name: name,
+                  role: 'customer',
+                  verification_status: 'unverified',
+                  primary_city: 'Delhi NCR',
+                },
+                { onConflict: 'id', ignoreDuplicates: true }
+              )
+              .then(() => {}, () => {});
+          }
+        }
+      } catch (err) {
+        console.warn('Auth check notice:', err);
+        if (!isCancelled) setAuthState('signed_out');
+      }
+    };
+
+    checkAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session?.user);
+      if (!session?.user) {
+        setAuthState('signed_out');
+        setCustomerName(null);
+      } else {
+        checkAuth();
+      }
     });
 
     return () => {
+      isCancelled = true;
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -171,7 +320,8 @@ function PostJobForm() {
       },
       (err) => {
         setLocating(false);
-        setErrorMsg(`Unable to retrieve GPS location (${err.message}). You can fill in the address manually.`);
+        setShowManualCoords(true);
+        setErrorMsg(`Unable to retrieve GPS location (${err.message}). You can enter coordinates manually below.`);
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
@@ -214,7 +364,39 @@ function PostJobForm() {
     e.preventDefault();
     setErrorMsg(null);
 
-    // Validation
+    // If user is guest/signed-out, redirect to login with preserved draft
+    if (authState === 'signed_out') {
+      try {
+        const draft: DraftData = {
+          category,
+          title,
+          description,
+          urgency,
+          addressLine,
+          landmark,
+          city,
+          pincode,
+          latitude,
+          longitude,
+          estimatedBudgetInr,
+        };
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      } catch {
+        // Ignore localStorage error
+      }
+      router.push('/login?role=customer&redirect=/post-job');
+      return;
+    }
+
+    // If user is logged in as a worker, block customer job creation
+    if (authState === 'worker') {
+      setErrorMsg(
+        'Service requests can only be posted from Customer accounts. You are currently signed in as a Worker / Partner. Please switch accounts or sign out.'
+      );
+      return;
+    }
+
+    // Strict Input Validation
     if (!title.trim() || title.trim().length < 5) {
       setErrorMsg('Please provide a specific job title (at least 5 characters).');
       return;
@@ -226,7 +408,12 @@ function PostJobForm() {
     }
 
     if (!addressLine.trim() || addressLine.trim().length < 5) {
-      setErrorMsg('Please enter your complete street address.');
+      setErrorMsg('Please enter your complete street address (at least 5 characters).');
+      return;
+    }
+
+    if (!city.trim()) {
+      setErrorMsg('Please specify the service city.');
       return;
     }
 
@@ -235,9 +422,17 @@ function PostJobForm() {
       return;
     }
 
-    // Default geographic fallback for Delhi NCR center if coordinates are omitted
-    const effectiveLat = latitude ?? 28.6139;
-    const effectiveLng = longitude ?? 77.209;
+    // Strict validation: Do not invent coordinates or silently use fake location
+    if (latitude === null || longitude === null || typeof latitude !== 'number' || typeof longitude !== 'number') {
+      setShowManualCoords(true);
+      setErrorMsg('Please click "Use Current GPS Location" or enter your service coordinates before submitting.');
+      return;
+    }
+
+    if (latitude < 6 || latitude > 38 || longitude < 68 || longitude > 98) {
+      setErrorMsg('Service location coordinates must be within valid geographic bounds for India (Lat 6-38, Lng 68-98).');
+      return;
+    }
 
     setSubmitting(true);
 
@@ -247,8 +442,8 @@ function PostJobForm() {
         title: title.trim(),
         description: description.trim(),
         urgency,
-        latitude: effectiveLat,
-        longitude: effectiveLng,
+        latitude,
+        longitude,
         addressLine: addressLine.trim(),
         landmark: landmark.trim() || undefined,
         city: city.trim(),
@@ -256,21 +451,52 @@ function PostJobForm() {
         estimatedBudgetInr: estimatedBudgetInr ? parseFloat(estimatedBudgetInr) : undefined,
       };
 
+      const supabaseClient = getSupabaseBrowserClient();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (supabaseClient) {
+        try {
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          if (session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`;
+          }
+        } catch {
+          // Ignore session retrieval error and rely on cookies
+        }
+      }
+
       const res = await fetch('/api/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401) {
           setErrorMsg(
             'Authentication required: Please sign in as a customer to post jobs. Your draft has been safely saved.'
           );
+        } else if (res.status === 403) {
+          setErrorMsg(
+            data.error || 'Access denied: Worker accounts cannot post customer jobs. Please switch to a customer account.'
+          );
         } else {
-          setErrorMsg(data.error || 'Failed to create job posting. Please check your inputs.');
+          const detailStr =
+            typeof data.details === 'string'
+              ? data.details
+              : data.details && typeof data.details === 'object' && 'message' in data.details
+              ? (data.details as { message: string }).message
+              : null;
+
+          const baseMsg = data.error || data.message || 'Failed to create job posting. Please check your inputs.';
+          const combinedMsg = detailStr && !baseMsg.includes(detailStr)
+            ? `${baseMsg} (${detailStr})`
+            : baseMsg;
+
+          setErrorMsg(combinedMsg);
         }
         setSubmitting(false);
         return;
@@ -286,6 +512,12 @@ function PostJobForm() {
       const created = data.data?.job;
       setSuccessJobId(created?.id || 'created');
       setCreatedJobData(created);
+
+      // Direct navigation to nearby worker discovery page
+      if (created?.id) {
+        router.push(`/jobs/${created.id}`);
+        return;
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Network error while creating job.');
     } finally {
@@ -307,7 +539,7 @@ function PostJobForm() {
             Job Request Broadcasted Successfully!
           </h1>
           <p className="text-sm text-[#576563]">
-            Verified local tradesmen in your area are being notified. You will receive competitive bids shortly.
+            Verified local tradesmen in your area are being notified. Discover nearby pros or review bids in your dashboard.
           </p>
         </div>
 
@@ -327,15 +559,16 @@ function PostJobForm() {
         </div>
 
         <div className="pt-2 flex flex-col sm:flex-row gap-3">
-          <Link href="/dashboard" className="w-full">
+          <Link href={`/jobs/${createdJobData.id}`} className="w-full">
             <Button variant="primary" className="w-full gap-1.5">
-              <Briefcase className="w-4 h-4" />
-              <span>Track in My Jobs Dashboard</span>
+              <Compass className="w-4 h-4" />
+              <span>Explore Matching Workers &amp; Dispatch</span>
             </Button>
           </Link>
-          <Link href="/" className="w-full">
-            <Button variant="secondary" className="w-full">
-              Back to Home
+          <Link href="/dashboard" className="w-full">
+            <Button variant="secondary" className="w-full gap-1.5">
+              <Briefcase className="w-4 h-4" />
+              <span>Track in My Jobs Dashboard</span>
             </Button>
           </Link>
         </div>
@@ -369,21 +602,59 @@ function PostJobForm() {
           </p>
         </div>
 
-        {/* Authentication Notice Banner */}
-        {isAuthenticated === false && (
+        {/* Role & Auth Status Banners */}
+        {authState === 'loading' && (
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-2.5 text-xs text-[#576563]">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0D4A52]" />
+            <span>Verifying customer account session...</span>
+          </div>
+        )}
+
+        {authState === 'signed_out' && (
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start justify-between gap-3 text-xs">
             <div className="flex items-start gap-2 text-amber-800">
               <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <span>
-                You are currently in guest mode. You can fill out this form now—your draft will be preserved if you navigate to log in.
+                You are currently in guest mode. You can fill out this request now—your draft will be preserved when you sign in.
               </span>
             </div>
             <Link
-              href="/login?redirect=/post-job"
+              href="/login?role=customer&redirect=/post-job"
               className="font-bold text-[#0D4A52] underline whitespace-nowrap hover:text-[#072F35]"
             >
-              Log In
+              Log In as Customer
             </Link>
+          </div>
+        )}
+
+        {authState === 'worker' && (
+          <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start justify-between gap-3 text-xs">
+            <div className="flex items-start gap-2 text-red-800">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Worker Account Detected:</strong> Job posting is reserved for household customers. Workers browse and bid via the Partner Marketplace.
+              </span>
+            </div>
+            <Link
+              href="/dashboard?role=worker"
+              className="font-bold text-red-700 underline whitespace-nowrap hover:text-red-900"
+            >
+              Go to Marketplace
+            </Link>
+          </div>
+        )}
+
+        {authState === 'customer' && customerName && (
+          <div className="p-2.5 bg-[#EDF7F4] border border-[#BCE5DA] rounded-xl flex items-center justify-between text-xs text-[#217E66]">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#217E66]" />
+              <span>
+                Posting as <strong>{customerName}</strong> (Verified Customer Account)
+              </span>
+            </div>
+            <Badge variant="green" className="text-[10px]">
+              Active Session
+            </Badge>
           </div>
         )}
       </div>
@@ -573,13 +844,74 @@ function PostJobForm() {
             </div>
           </div>
 
-          {latitude && longitude && (
-            <p className="text-[11px] text-[#217E66] flex items-center gap-1 font-medium">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>
-                Coordinates locked ({latitude.toFixed(4)}, {longitude.toFixed(4)}) for PostGIS nearby worker dispatch.
+          {latitude && longitude ? (
+            <div className="flex items-center justify-between bg-[#EBF4F3] p-2.5 rounded-xl border border-[#BCE5DA] text-[11px] text-[#217E66] font-medium">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Coordinates locked ({latitude.toFixed(4)}, {longitude.toFixed(4)}) for PostGIS spatial dispatch.
+                </span>
               </span>
-            </p>
+              <button
+                type="button"
+                onClick={() => setShowManualCoords(!showManualCoords)}
+                className="text-xs text-[#0D4A52] underline hover:text-[#217E66]"
+              >
+                {showManualCoords ? 'Hide Coordinates' : 'Edit'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between bg-[#F8F6F0] p-2.5 rounded-xl border border-[#E5DFD2] text-[11px] text-[#655D50]">
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-[#D97706] shrink-0" />
+                <span>Exact GPS coordinates required for worker dispatch.</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  disabled={locating}
+                  className="text-[#0D4A52] font-semibold underline hover:text-[#217E66] cursor-pointer"
+                >
+                  {locating ? 'Locating...' : 'Lock Location'}
+                </button>
+                <span className="text-[#B5AE9E]">|</span>
+                <button
+                  type="button"
+                  onClick={() => setShowManualCoords(!showManualCoords)}
+                  className="text-[#655D50] underline hover:text-[#152220] cursor-pointer"
+                >
+                  Manual
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showManualCoords && (
+            <div className="grid grid-cols-2 gap-3 p-3 bg-[#F8F6F0] rounded-xl border border-[#E5DFD2]">
+              <div>
+                <label className="block text-[11px] font-medium text-[#655D50] mb-1">Latitude (6 to 38)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={latitude ?? ''}
+                  onChange={(e) => setLatitude(e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder="e.g. 28.6139"
+                  className="w-full p-2 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] outline-none bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-[#655D50] mb-1">Longitude (68 to 98)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={longitude ?? ''}
+                  onChange={(e) => setLongitude(e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder="e.g. 77.2090"
+                  className="w-full p-2 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] outline-none bg-white"
+                />
+              </div>
+            </div>
           )}
         </div>
 
@@ -600,6 +932,33 @@ function PostJobForm() {
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none"
               />
             </div>
+            {benchmark && (
+              <div className="mt-2 p-2.5 bg-[#FAF9F5] border border-[#BCE5DA] rounded-xl flex items-center justify-between text-xs animate-in fade-in">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
+                  <span className="text-[#576563] text-[11px] truncate">
+                    Fair Market ({benchmark.area}):{' '}
+                    <strong className="text-[#152220]">₹{benchmark.min}–₹{benchmark.max}</strong>
+                    {' '}(Typical: <strong className="text-[#217E66]">₹{benchmark.median}</strong>)
+                  </span>
+                </div>
+                {!estimatedBudgetInr && (
+                  <button
+                    type="button"
+                    onClick={() => setEstimatedBudgetInr(benchmark.median.toString())}
+                    className="text-[11px] font-bold text-[#0D4A52] hover:text-[#072F35] underline ml-2 shrink-0"
+                  >
+                    Use ₹{benchmark.median}
+                  </button>
+                )}
+              </div>
+            )}
+            {loadingBenchmark && (
+              <p className="text-[10px] text-[#83928E] mt-1 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Checking local price benchmarks...</span>
+              </p>
+            )}
           </div>
 
           <div>
@@ -641,32 +1000,93 @@ function PostJobForm() {
                 </button>
               </div>
             )}
+            {photoPreview && (
+              <p className="text-[10px] text-[#83928E] mt-1.5">
+                Photo attached. (Note: Cloud storage bucket `job-photos` is not configured in Supabase Storage, so photo preview is retained locally with your request specifications.)
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Submit Button */}
-        <div className="pt-4 border-t border-[#E5DFD2]">
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            className="w-full justify-center gap-2"
-            disabled={submitting}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Broadcasting Job Request...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-emerald-300" />
-                <span>Post Job &amp; Receive Worker Bids</span>
-              </>
-            )}
-          </Button>
+        {/* Submit Button & Inline Feedback */}
+        <div className="pt-4 border-t border-[#E5DFD2] space-y-3">
+          {/* Dual error display right above submit button so users never miss validation feedback */}
+          {errorMsg && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-xs text-red-700 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{errorMsg}</span>
+            </div>
+          )}
 
-          <p className="text-[11px] text-center text-[#576563] mt-3">
+          {authState === 'signed_out' ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              className="w-full justify-center gap-2"
+              onClick={() => {
+                try {
+                  const draft: DraftData = {
+                    category,
+                    title,
+                    description,
+                    urgency,
+                    addressLine,
+                    landmark,
+                    city,
+                    pincode,
+                    latitude,
+                    longitude,
+                    estimatedBudgetInr,
+                  };
+                  localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+                } catch {
+                  // Ignore localStorage error
+                }
+                router.push('/login?role=customer&redirect=/post-job');
+              }}
+            >
+              <User className="w-4 h-4" />
+              <span>Sign In as Customer to Post Job</span>
+            </Button>
+          ) : authState === 'worker' ? (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                disabled
+                className="w-full justify-center gap-2 opacity-60 cursor-not-allowed"
+              >
+                <span>Job Posting Disabled for Worker Accounts</span>
+              </Button>
+              <p className="text-[11px] text-center text-red-700">
+                You are signed in with a Worker account. Service requests must be created from a Customer account.
+              </p>
+            </div>
+          ) : (
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="w-full justify-center gap-2"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Broadcasting Job Request &amp; Finding Pros...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-emerald-300" />
+                  <span>Post Job &amp; Receive Worker Bids</span>
+                </>
+              )}
+            </Button>
+          )}
+
+          <p className="text-[11px] text-center text-[#576563]">
             Protected by Sahayak Two-Stage OTP Handshake. No upfront payment required.
           </p>
         </div>
