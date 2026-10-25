@@ -27,6 +27,7 @@ import {
 import { ServiceCategory, JobUrgency } from '@/types/jobs';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { reverseGeocodeCoordinates } from '@/lib/utils/geocoding';
+import { CustomerProfileModal } from '@/components/profile/CustomerProfileModal';
 
 const DRAFT_STORAGE_KEY = 'sahayak_job_draft_v1';
 
@@ -203,6 +204,7 @@ function PostJobForm() {
   // Status & Auth
   const [authState, setAuthState] = useState<'loading' | 'signed_out' | 'customer' | 'worker'>('loading');
   const [customerName, setCustomerName] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -665,10 +667,15 @@ function PostJobForm() {
           </Link>
 
           {authState === 'customer' && customerName && (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#EDF7F4] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52] shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsProfileOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#EDF7F4] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52] shadow-2xs hover:bg-[#D5EFE8] transition-colors cursor-pointer"
+              title="Click to view & edit your profile"
+            >
               <User className="w-3.5 h-3.5 text-[#217E66]" />
               <span>{customerName}</span>
-            </div>
+            </button>
           )}
         </div>
 
@@ -1098,6 +1105,14 @@ function PostJobForm() {
           )}
         </div>
       </form>
+
+      <CustomerProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        onProfileUpdated={(newName) => {
+          setCustomerName(newName);
+        }}
+      />
     </div>
   );
 }

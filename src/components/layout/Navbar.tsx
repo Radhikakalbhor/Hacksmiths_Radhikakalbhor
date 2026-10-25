@@ -7,10 +7,13 @@ import { Menu, X, ArrowRight, Briefcase, CalendarClock, User, LogOut } from 'luc
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'motion/react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { LiquidMetalButton } from '@/components/ui/liquid-metal-button';
+import { CustomerProfileModal } from '@/components/profile/CustomerProfileModal';
 
 function NavbarContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const pathname = usePathname();
 
   // Floating navbar animation (reveals on scroll up, hides on scroll down)
@@ -40,14 +43,38 @@ function NavbarContent() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
 
+    const resolveUserInfo = async (sessionUser: any) => {
+      if (!sessionUser) {
+        setUserEmail(null);
+        setDisplayName(null);
+        return;
+      }
+      setUserEmail(sessionUser.email ?? null);
+      const metaName = sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name;
+      if (metaName) {
+        setDisplayName(metaName);
+      } else {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', sessionUser.id)
+          .maybeSingle();
+        if (profile?.full_name) {
+          setDisplayName(profile.full_name);
+        } else if (sessionUser.email) {
+          setDisplayName(sessionUser.email.split('@')[0]);
+        }
+      }
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserEmail(session?.user?.email ?? null);
+      resolveUserInfo(session?.user);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user?.email ?? null);
+      resolveUserInfo(session?.user);
     });
 
     return () => subscription.unsubscribe();
@@ -58,12 +85,14 @@ function NavbarContent() {
     if (supabase) {
       await supabase.auth.signOut();
       setUserEmail(null);
+      setDisplayName(null);
     }
   };
 
   const isAuthPage = pathname === '/login' || pathname.startsWith('/login');
 
   return (
+    <>
     <AnimatePresence mode="wait">
       <motion.header
         initial={{ y: 0, opacity: 1 }}
@@ -150,14 +179,26 @@ function NavbarContent() {
           {/* Desktop Action Buttons */}
           <div className="hidden md:flex items-center gap-3">
             {isAuthPage ? null : userEmail ? (
-              <div className="flex items-center gap-2 bg-white px-2.5 py-1 rounded-lg border border-[#E5DFD2] text-xs text-[#152220]">
-                <User className="w-3.5 h-3.5 text-[#217E66]" />
-                <span className="font-medium max-w-[120px] truncate">{userEmail}</span>
+              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(true)}
+                  className="flex items-center gap-1.5 hover:text-[#0D4A52] transition-colors cursor-pointer text-left"
+                  title="View & Edit Profile"
+                  aria-label="Open customer profile"
+                >
+                  <User className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
+                  <span className="font-semibold max-w-[130px] truncate">
+                    {displayName || userEmail}
+                  </span>
+                </button>
+                <div className="h-3 w-px bg-[#E5DFD2] mx-0.5" />
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="text-red-600 hover:text-red-700 ml-1 p-0.5"
+                  className="text-red-600 hover:text-red-700 p-0.5 transition-colors cursor-pointer"
                   title="Sign Out"
+                  aria-label="Sign out"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
@@ -247,12 +288,23 @@ function NavbarContent() {
           {!isAuthPage && (
             <div className="pt-3 flex flex-col gap-2">
               {userEmail ? (
-                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-[#E5DFD2] text-xs">
-                  <span className="font-medium text-[#152220] truncate">{userEmail}</span>
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-[#E5DFD2] text-xs shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setIsProfileModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 text-left font-semibold text-[#152220] hover:text-[#0D4A52] truncate cursor-pointer"
+                    title="View & Edit Profile"
+                  >
+                    <User className="w-4 h-4 text-[#217E66] shrink-0" />
+                    <span className="truncate">{displayName || userEmail}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleSignOut}
-                    className="text-red-600 font-semibold text-xs"
+                    className="text-red-600 font-semibold text-xs ml-2 cursor-pointer hover:text-red-700"
                   >
                     Sign Out
                   </button>
@@ -274,6 +326,15 @@ function NavbarContent() {
       )}
       </motion.header>
     </AnimatePresence>
+
+    <CustomerProfileModal
+      isOpen={isProfileModalOpen}
+      onClose={() => setIsProfileModalOpen(false)}
+      onProfileUpdated={(newName) => {
+        setDisplayName(newName);
+      }}
+    />
+    </>
   );
 }
 
