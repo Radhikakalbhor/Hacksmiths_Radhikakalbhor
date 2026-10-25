@@ -11,6 +11,7 @@ import {
   Sparkles,
   Star,
   ShieldCheck,
+  Lock,
   AlertCircle,
   Loader2,
   Briefcase,
@@ -699,12 +700,6 @@ function JobDiscoveryContent() {
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Dashboard</span>
         </Link>
-        <div className="flex items-center gap-2">
-          <Badge variant={booking ? 'teal' : 'green'}>
-            {booking ? `BOOKING: ${booking.stage.toUpperCase()}` : job.status.toUpperCase()}
-          </Badge>
-          <span className="text-xs text-[#83928E] font-mono">#{job.id.slice(0, 8)}</span>
-        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -717,9 +712,6 @@ function JobDiscoveryContent() {
               <Compass className="w-4 h-4 text-[#217E66]" />
               <span>Service Progress Timeline</span>
             </h3>
-            <p className="text-xs text-[#576563]">
-              Real-time persisted lifecycle status from job creation to final completion.
-            </p>
           </div>
           {isJobCancelled ? (
             <Badge variant="red" className="flex items-center gap-1 w-fit">
@@ -985,11 +977,6 @@ function JobDiscoveryContent() {
                   <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-white/20 text-white">
                     Direct Booking Confirmed
                   </span>
-                  {booking.isDemoWorker && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-400 text-amber-950">
-                      [DEMO PROFESSIONAL]
-                    </span>
-                  )}
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black tracking-tight">
                   {booking.stage === 'requested' && 'Finding & Assigning Professional...'}
@@ -1187,7 +1174,7 @@ function JobDiscoveryContent() {
                     <span>SERVICE START OTP CODE</span>
                   </div>
                   <p className="text-[11px] text-[#576563] leading-relaxed">
-                    Share this 4-digit code verbally with the professional <strong>only</strong> when they physically arrive at your location.
+                    <strong>NOTE:</strong> Share this 4-digit code verbally with the professional <strong>only</strong> when they physically arrive at your location.
                   </p>
                 </div>
 
@@ -1229,10 +1216,6 @@ function JobDiscoveryContent() {
                     )}
                   </div>
                 )}
-
-                <p className="text-[10px] text-[#83928E] leading-tight">
-                  🛡️ Cryptographically validated. Distinguishes demo OTP from SMS; no telecom carrier delay.
-                </p>
               </div>
 
               {/* Travel ETA & Tracking Card */}
@@ -1282,148 +1265,12 @@ function JobDiscoveryContent() {
                   </div>
                 </div>
 
-                <div className="text-[10px] text-[#83928E] space-y-0.5">
-                  {booking.stage === 'cancelled' ? (
-                    <span className="text-red-700 font-semibold block">
-                      🛑 Tracking simulation ended due to cancellation.
-                    </span>
-                  ) : booking.isDemoWorker ? (
-                    <span className="text-amber-800 font-semibold block">
-                      ⚡ Simulated tracking active for demo worker account.
-                    </span>
-                  ) : (
-                    <span>Real-time GPS requires worker explicit permission while in transit.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Worker Experience / Simulation Accordion */}
-            <div className="pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setShowWorkerSimulation(!showWorkerSimulation)}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-semibold text-[#0D4A52] transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-[#217E66]" />
-                  <span>
-                    Worker View &amp; Simulation Controls ({booking.isDemoWorker ? 'Demo Worker Actions' : 'Worker Lifecycle'})
-                  </span>
-                </div>
-                {showWorkerSimulation ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-
-              {showWorkerSimulation && (
-                <div className="mt-3 p-4 bg-white rounded-xl border border-gray-200 space-y-4 animate-in fade-in">
-                  <p className="text-xs text-[#576563]">
-                    These controls simulate or execute the worker counterpart experience: status progression and OTP arrival verification.
-                  </p>
-
-                  {transitionError && (
-                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{transitionError}</span>
-                    </div>
-                  )}
-
-                  {transitionSuccess && (
-                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>{transitionSuccess}</span>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2.5 items-center">
-                    {booking.stage === 'accepted' && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={isTransitioningStatus}
-                        onClick={() => handleTransitionBooking('on_the_way')}
-                        className="text-xs gap-1.5"
-                      >
-                        {isTransitioningStatus && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                        <span>Worker Action: Start Traveling (On The Way)</span>
-                      </Button>
-                    )}
-
-                    {booking.stage === 'on_the_way' && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={isTransitioningStatus}
-                        onClick={() => handleTransitionBooking('arrived')}
-                        className="text-xs gap-1.5"
-                      >
-                        {isTransitioningStatus && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                        <span>Worker Action: Mark Arrived at Destination</span>
-                      </Button>
-                    )}
-
-                    {booking.stage === 'arrived' && (
-                      <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
-                        <input
-                          type="text"
-                          maxLength={4}
-                          placeholder="Enter 4-digit OTP"
-                          value={workerOtpInput}
-                          onChange={(e) => setWorkerOtpInput(e.target.value.replace(/\D/g, ''))}
-                          className="px-3 py-1.5 text-xs font-mono tracking-widest border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0D4A52] outline-none"
-                        />
-                        <Button
-                          variant="accent"
-                          size="sm"
-                          disabled={isTransitioningStatus || workerOtpInput.length !== 4}
-                          onClick={() => handleTransitionBooking('in_progress', workerOtpInput)}
-                          className="text-xs gap-1.5"
-                        >
-                          {isTransitioningStatus && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          <span>Verify Customer OTP &amp; Start Job</span>
-                        </Button>
-
-                        {customerOtp && (
-                          <button
-                            type="button"
-                            onClick={() => setWorkerOtpInput(customerOtp)}
-                            className="text-xs text-[#217E66] hover:underline"
-                          >
-                            Autofill OTP ({customerOtp})
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {booking.stage === 'in_progress' && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={isTransitioningStatus}
-                        onClick={() => handleTransitionBooking('completed')}
-                        className="text-xs gap-1.5 bg-emerald-700 hover:bg-emerald-800"
-                      >
-                        {isTransitioningStatus && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                        <span>Worker Action: Mark Service Completed</span>
-                      </Button>
-                    )}
-
-                    {booking.stage !== 'completed' && booking.stage !== 'cancelled' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={isTransitioningStatus}
-                        onClick={() => {
-                          const reason = prompt('Please enter cancellation reason:');
-                          if (reason) handleTransitionBooking('cancelled', undefined);
-                        }}
-                        className="text-xs text-red-600 hover:bg-red-50 ml-auto"
-                      >
-                        Cancel Booking
-                      </Button>
-                    )}
+                {booking.stage === 'cancelled' && (
+                  <div className="text-[10px] text-red-700 font-semibold">
+                    🛑 Tracking simulation ended due to cancellation.
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1438,7 +1285,7 @@ function JobDiscoveryContent() {
                 {job.category}
               </span>
               <Badge variant={job.urgency === 'emergency' ? 'amber' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'teal' : 'neutral'}>
-                {job.urgency === 'emergency' ? 'Emergency' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'Same Day' : 'Standard'}
+                Status : {job.urgency === 'emergency' ? 'Emergency' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'Same Day' : 'Standard'}
               </Badge>
               {bidsCount > 0 && (
                 <Badge variant="teal">
@@ -1450,13 +1297,6 @@ function JobDiscoveryContent() {
               {job.title}
             </h1>
           </div>
-
-          <Link href="/dashboard">
-            <Button variant="primary" size="sm" className="gap-1.5 shrink-0">
-              <Briefcase className="w-3.5 h-3.5" />
-              <span>Review Bids in Dashboard</span>
-            </Button>
-          </Link>
         </div>
 
         <p className="text-xs sm:text-sm text-[#576563] leading-relaxed">
@@ -1486,23 +1326,6 @@ function JobDiscoveryContent() {
             <span>Posted {new Date(job.created_at).toLocaleDateString()}</span>
           </div>
         </div>
-
-        {/* Urgency Dispatch Indicator */}
-        <div className="p-3 bg-[#FAF8F3] border border-[#E5DFD2] rounded-xl flex items-start gap-2.5 text-xs text-[#0D4A52]">
-          <Radio className="w-4 h-4 text-[#217E66] shrink-0 mt-0.5 animate-pulse" />
-          <div>
-            <span className="font-bold">
-              {job.urgency === 'emergency'
-                ? '🚨 Emergency Dispatch Broadcast Active:'
-                : (job.urgency === 'same_day' || job.urgency === 'urgent')
-                ? '⚡ Same-Day Service Alert Broadcast Active:'
-                : '📅 Standard Request Broadcasted:'}
-            </span>{' '}
-            <span className="text-[#576563]">
-              Neighborhood professionals in {job.city} matching {job.category} have been alerted. You can also directly click <strong>&quot;Book Now&quot;</strong> on any verified professional below for instant Uber/Rapido-style dispatch.
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Nearby Worker Discovery Section */}
@@ -1513,9 +1336,6 @@ function JobDiscoveryContent() {
               <Compass className="w-5 h-5 text-[#0D4A52]" />
               <span>Available Neighborhood {job.category.toUpperCase()} Professionals</span>
             </h2>
-            <p className="text-xs text-[#576563]">
-              PostGIS distance calculation from your service coordinates within {(searchRadius / 1000).toFixed(0)} km.
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1694,14 +1514,9 @@ function JobDiscoveryContent() {
                         onClick={() => handleOpenBookingConfirm(w)}
                         className="text-xs font-bold justify-center bg-[#0D4A52] hover:bg-[#072F35]"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                         <span>{isAssignedToThis ? 'Booked' : 'Book Now'}</span>
                       </Button>
                     </div>
-
-                    <p className="text-[10px] text-[#83928E] text-center leading-tight">
-                      Instant Uber/Rapido-style dispatch with customer arrival OTP.
-                    </p>
                   </div>
                 </Card>
               );
@@ -1718,10 +1533,7 @@ function JobDiscoveryContent() {
           <div className="bg-white rounded-3xl border border-[#E5DFD2] max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-6 animate-in zoom-in-95">
             <div className="flex items-start justify-between">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  Instant Dispatch
-                </span>
-                <h3 className="text-xl font-black text-[#152220] mt-1">
+                <h3 className="text-xl font-black text-[#152220]">
                   Confirm Worker Booking
                 </h3>
               </div>
@@ -1817,14 +1629,14 @@ function JobDiscoveryContent() {
               </div>
             </div>
 
-            {/* Zero-Trust Notice */}
+            {/* End-to-End Encryption Notice */}
             <div className="p-3 bg-[#FAF8F3] rounded-xl border border-[#E5DFD2] text-[11px] text-[#576563] space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-[#0D4A52]">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#217E66]" />
-                <span>Zero-Trust Start Protection</span>
+                <Lock className="w-3.5 h-3.5 text-[#217E66]" />
+                <span>End-to-End Encryption</span>
               </div>
               <p>
-                A secure numeric OTP will be generated. You share this code with the professional <strong>only</strong> when they arrive at your door to authenticate service commencement.
+                A secure numeric OTP and booking handshake is encrypted end-to-end. You share this code with the professional <strong>only</strong> when they arrive at your door to authenticate service commencement.
               </p>
             </div>
 
@@ -1859,10 +1671,7 @@ function JobDiscoveryContent() {
                     <span>Confirming Booking...</span>
                   </>
                 ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>Confirm &amp; Dispatch Now</span>
-                  </>
+                  <span>Confirm &amp; Dispatch Now</span>
                 )}
               </Button>
             </div>
@@ -2331,7 +2140,7 @@ function JobDiscoveryContent() {
 
 export default function JobDiscoveryPage() {
   return (
-    <div className="min-h-[85vh] bg-[#FAF9F5] py-8">
+    <div className="min-h-[85vh] bg-transparent py-8">
       <Suspense fallback={<div className="text-center text-xs text-[#576563] p-12">Loading Job Details...</div>}>
         <JobDiscoveryContent />
       </Suspense>

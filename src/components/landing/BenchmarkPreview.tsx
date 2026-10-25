@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ShieldAlert, CheckCircle2, Info } from 'lucide-react';
+import { ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 
@@ -66,45 +66,12 @@ const SAMPLE_BENCHMARKS: BenchmarkItem[] = [
 
 export function BenchmarkPreview() {
   const [selectedBenchmark, setSelectedBenchmark] = useState<BenchmarkItem>(SAMPLE_BENCHMARKS[0]);
-  const [dataSource, setDataSource] = useState<'live_db' | 'baseline_reference'>('baseline_reference');
-
-  React.useEffect(() => {
-    // Attempt non-leaking query against live price_benchmarks table
-    const checkLiveDb = async () => {
-      try {
-        const { getSupabaseBrowserClient } = await import('@/lib/supabase/client');
-        const supabase = getSupabaseBrowserClient();
-        if (!supabase) return;
-
-        const { data, error } = await supabase
-          .from('price_benchmarks')
-          .select('id, category, micro_market_area, min_price_inr, median_price_inr, max_price_inr')
-          .limit(4);
-
-        if (!error && data && data.length > 0) {
-          setDataSource('live_db');
-        } else {
-          setDataSource('baseline_reference');
-        }
-      } catch {
-        setDataSource('baseline_reference');
-      }
-    };
-
-    checkLiveDb();
-  }, []);
 
   return (
-    <section id="benchmarks" className="py-20 bg-[#FAF9F5] border-t border-[#E5DFD2]">
+    <section id="benchmarks" className="py-20 bg-transparent border-t border-[#E5DFD2]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
-          <div className="flex items-center justify-center gap-2">
-            <Badge variant="green">Transparent Price Matrix</Badge>
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#EDF7F4] text-[#217E66] border border-[#BCE5DA]">
-              {dataSource === 'live_db' ? 'Connected to Supabase Postgres' : 'Empirical Micro-Market Baselines'}
-            </span>
-          </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#152220] tracking-tight">
             No more inflated quotes. Zero hidden markups.
           </h2>
@@ -220,15 +187,6 @@ export function BenchmarkPreview() {
                     <span>Worker keeps: {selectedBenchmark.workerPocketsPercentage}%+</span>
                   </div>
                 </div>
-              </div>
-
-              {/* Informational Footer Note */}
-              <div className="mt-6 pt-5 border-t border-[#E5DFD2] flex items-start gap-2.5 text-xs text-[#576563]">
-                <Info className="w-4 h-4 text-[#0D4A52] shrink-0 mt-0.5" />
-                <p>
-                  Benchmarks are calculated continuously from real completed jobs in your micro-pincode.
-                  Workers bid freely; you can accept bids, counter-offer, or hire your preferred professional.
-                </p>
               </div>
             </Card>
           </div>

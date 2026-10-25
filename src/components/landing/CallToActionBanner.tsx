@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ArrowRight, Sparkles, UserCheck } from 'lucide-react';
+import { ArrowRight, UserCheck } from 'lucide-react';
 
 export function CallToActionBanner() {
   return (
@@ -15,7 +15,6 @@ export function CallToActionBanner() {
 
           <div className="relative z-10 max-w-2xl space-y-5">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-emerald-200 border border-white/15">
-              <Sparkles className="w-3.5 h-3.5" />
               <span>Hyperlocal Community Revolution</span>
             </span>
 

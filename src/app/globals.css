@@ -51,3 +51,20 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #B7ACA0;
 }
+
+/* Hide Next.js dev indicator / N logo */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dialog],
+[data-nextjs-toast-wrapper],
+#__next-build-watcher,
+#nextjs-dev-indicator,
+[data-nextjs-dev-tools-button],
+[data-nextjs-dev-tools],
+div:has(> svg[data-next-icon="true"]),
+button:has(> svg[data-next-icon="true"]) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

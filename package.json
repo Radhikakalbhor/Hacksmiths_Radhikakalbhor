@@ -10,12 +10,19 @@
     "test": "tsx --test \"src/tests/**/*.test.ts\""
   },
   "dependencies": {
+    "@paper-design/shaders": "^0.0.82",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@tabler/icons-react": "^3.49.0",
+    "@types/three": "^0.186.0",
+    "clsx": "^2.1.1",
     "lucide-react": "^1.61.0",
+    "motion": "^14.6.0",
     "next": "16.4.3",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "tailwind-merge": "^3.7.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

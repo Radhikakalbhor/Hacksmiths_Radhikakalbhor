@@ -87,6 +87,7 @@ function DashboardContent() {
 
   const [activeRole, setActiveRole] = useState<'customer' | 'worker'>(initialRole);
   const [sessionUser, setSessionUser] = useState<{ id: string; email?: string } | null>(null);
+  const [userRole, setUserRole] = useState<'customer' | 'worker' | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
   // Customer State
@@ -121,7 +122,7 @@ function DashboardContent() {
   });
   const [submittingBid, setSubmittingBid] = useState(false);
 
-  // Check auth session
+  // Check auth session and resolve user role (customer vs worker)
   useEffect(() => {
     const supabase = getSupabaseClient();
     if (!supabase) {
@@ -129,25 +130,62 @@ function DashboardContent() {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setSessionUser({ id: session.user.id, email: session.user.email });
+    const resolveRoleAndSession = async (user: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null) => {
+      if (!user) {
+        setSessionUser(null);
+        setUserRole(null);
+        setLoadingSession(false);
+        return;
       }
+
+      setSessionUser({ id: user.id, email: user.email });
+
+      // Determine role from metadata or profiles table
+      const metaRole = user.user_metadata?.role as 'customer' | 'worker' | undefined;
+      let detectedRole: 'customer' | 'worker' = metaRole === 'worker' ? 'worker' : 'customer';
+
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profile?.role === 'worker') {
+          detectedRole = 'worker';
+        } else if (profile?.role === 'customer') {
+          detectedRole = 'customer';
+        }
+      } catch {
+        // Fallback to metaRole
+      }
+
+      setUserRole(detectedRole);
+      setActiveRole(detectedRole);
       setLoadingSession(false);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      resolveRoleAndSession(session?.user ?? null);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setSessionUser({ id: session.user.id, email: session.user.email });
-      } else {
-        setSessionUser(null);
-      }
+      resolveRoleAndSession(session?.user ?? null);
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Enforce role locking: customers can only view customer portal; workers can only view worker marketplace
+  useEffect(() => {
+    if (userRole === 'customer' && activeRole !== 'customer') {
+      setActiveRole('customer');
+    } else if (userRole === 'worker' && activeRole !== 'worker') {
+      setActiveRole('worker');
+    }
+  }, [userRole, activeRole]);
 
   // Fetch Customer Jobs
   const fetchCustomerJobs = useCallback(async () => {
@@ -389,124 +427,83 @@ function DashboardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F5] py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Top Header & Role Switcher */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#E5DFD2]">
-          <div>
-            <div className="flex items-center gap-2">
+    <div className="min-h-screen bg-transparent py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* First Card: Dashboard Header & Role View */}
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 sm:p-8 shadow-xl">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0D4A52] tracking-tight">
                 Sahayak Marketplace Dashboard
               </h1>
-              <Badge variant="teal">Live Hyperlocal</Badge>
+              <p className="text-sm text-[#576563] mt-1">
+                Real-time job postings, verified bids, counter-offer negotiations, and atomic worker assignment.
+              </p>
             </div>
-            <p className="text-sm text-[#576563] mt-1">
-              Real-time job postings, verified bids, counter-offer negotiations, and atomic worker assignment.
-            </p>
-          </div>
 
-          {/* User Session Status */}
-          <div className="flex items-center gap-3">
-            {loadingSession ? (
-              <span className="text-xs text-[#576563]">Verifying session...</span>
-            ) : sessionUser ? (
-              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-[#E5DFD2] shadow-sm">
-                <User className="w-4 h-4 text-[#217E66]" />
-                <span className="text-xs font-medium text-[#152220] max-w-[150px] truncate">
-                  {sessionUser.email}
-                </span>
-                <button
-                  onClick={handleSignOut}
-                  title="Sign Out"
-                  className="text-xs text-red-600 hover:text-red-700 font-medium ml-1 flex items-center gap-0.5"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Exit</span>
-                </button>
-              </div>
-            ) : (
-              <Link href="/login">
-                <Button size="sm" variant="secondary">
-                  Sign In to Post / Bid
-                </Button>
-              </Link>
-            )}
-
-            {/* Role Toggle */}
-            <div className="bg-[#EAE4D6] p-1 rounded-lg flex items-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveRole('customer');
-                  setActionError(null);
-                  setActionSuccess(null);
-                }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  activeRole === 'customer'
-                    ? 'bg-white text-[#0D4A52] shadow-sm'
-                    : 'text-[#576563] hover:text-[#152220]'
-                }`}
-              >
-                Customer View
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveRole('worker');
-                  setActionError(null);
-                  setActionSuccess(null);
-                }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  activeRole === 'worker'
-                    ? 'bg-[#0D4A52] text-white shadow-sm'
-                    : 'text-[#576563] hover:text-[#152220]'
-                }`}
-              >
-                Worker Marketplace
-              </button>
+            {/* Role View Badge (strictly hides worker marketplace for customer; hides customer view for worker) */}
+            <div className="flex items-center gap-3 shrink-0">
+              {loadingSession ? (
+                <span className="text-xs text-[#576563]">Loading...</span>
+              ) : userRole === 'customer' ? (
+                <div className="inline-flex items-center px-3.5 py-1.5 rounded-lg bg-[#EBF4F3] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52]">
+                  <span>Customer View</span>
+                </div>
+              ) : userRole === 'worker' ? (
+                <div className="inline-flex items-center px-3.5 py-1.5 rounded-lg bg-[#0D4A52] text-white text-xs font-semibold shadow-xs">
+                  <span>Worker Marketplace</span>
+                </div>
+              ) : (
+                <Link href="/login">
+                  <Button size="sm" variant="secondary">
+                    Sign In
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Global Feedback Banners */}
-        {actionSuccess && (
-          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="text-sm font-medium">{actionSuccess}</div>
-          </div>
-        )}
+        {/* Second Card: The rest of the content (Service Requests & Marketplace) */}
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 sm:p-8 shadow-xl space-y-8">
+          {/* Global Feedback Banners */}
+          {actionSuccess && (
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-sm font-medium">{actionSuccess}</div>
+            </div>
+          )}
 
-        {actionError && (
-          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className="text-sm">{actionError}</div>
-          </div>
-        )}
+          {actionError && (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-sm">{actionError}</div>
+            </div>
+          )}
 
-        {/* ========================================================================= */}
-        {/* CUSTOMER PORTAL */}
-        {/* ========================================================================= */}
-        {activeRole === 'customer' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
-                  <Briefcase className="w-5 h-5 text-[#0D4A52]" />
-                  <span>My Posted Service Requests</span>
-                </h2>
-                <p className="text-xs text-[#576563]">
-                  Review incoming worker offers, negotiate counter-offers, and assign jobs safely.
-                </p>
-              </div>
+          {/* ========================================================================= */}
+          {/* CUSTOMER PORTAL */}
+          {/* ========================================================================= */}
+          {activeRole === 'customer' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-[#0D4A52]" />
+                    <span>Service Requests</span>
+                  </h2>
+                  <p className="text-xs text-[#576563]">
+                    Review incoming worker offers, negotiate counter-offers, and assign jobs safely.
+                  </p>
+                </div>
 
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                 <Button size="sm" variant="ghost" onClick={fetchCustomerJobs} disabled={loadingJobs}>
                   <RefreshCw className={`w-3.5 h-3.5 mr-1 ${loadingJobs ? 'animate-spin' : ''}`} />
                   <span>Refresh</span>
                 </Button>
                 <Link href="/post-job">
-                  <Button size="sm" variant="primary" className="gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                  <Button size="sm" variant="primary">
                     <span>Post New Job</span>
                   </Button>
                 </Link>
@@ -1031,6 +1028,7 @@ function DashboardContent() {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

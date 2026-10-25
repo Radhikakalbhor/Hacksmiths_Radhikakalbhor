@@ -2,15 +2,13 @@
 
 import { KeyRound, ShieldAlert, CheckCircle2, PhoneForwarded } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 
 export function SafetyFlow() {
   return (
-    <section id="safety" className="py-20 bg-[#FAF9F5] border-t border-[#E5DFD2]">
+    <section id="safety" className="py-20 bg-transparent border-t border-[#E5DFD2]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
-          <Badge variant="amber">Community Trust & Safety</Badge>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#152220] tracking-tight">
             Safety engineered into every single job
           </h2>

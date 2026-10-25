@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { SERVICE_CATEGORIES } from '@/lib/config/constants';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   Wrench: <Wrench className="w-5 h-5 text-[#0D4A52]" />,
@@ -30,20 +29,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 
 export function ServicesGrid() {
   return (
-    <section id="services" className="py-20 bg-white border-t border-[#E5DFD2]">
+    <section id="services" className="py-12 bg-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
-          <Badge variant="teal">Vetted Blue-Collar Trades</Badge>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#152220] tracking-tight">
-            Skilled help for every home requirement
-          </h2>
-          <p className="text-sm sm:text-base text-[#576563]">
-            From emergency pipe leaks to daily household helpers, find verified neighborhood
-            tradesmen ready to bid transparently.
-          </p>
-        </div>
-
         {/* 8 Category Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {SERVICE_CATEGORIES.map((category) => (
@@ -55,7 +42,7 @@ export function ServicesGrid() {
             >
               <Card
                 hoverEffect
-                className="h-full flex flex-col justify-between border-[#E5DFD2] bg-[#FAF9F5] group-hover:bg-white transition-colors"
+                className="h-full flex flex-col justify-between border-[#E5DFD2] bg-white/75 backdrop-blur-sm group-hover:bg-white transition-colors"
               >
                 <div className="space-y-3">
                   <div className="w-12 h-12 rounded-xl bg-[#EBF4F3] flex items-center justify-center group-hover:scale-105 transition-transform duration-200">

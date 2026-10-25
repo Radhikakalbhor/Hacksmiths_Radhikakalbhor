@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { BackgroundCubesGrid } from '@/components/ui/background-cubes-grid';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -43,9 +44,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-[#FAF9F5] text-[#152220]">
+      <body className="min-h-full flex flex-col bg-[#FAF9F5] text-[#152220] relative">
+        {/* Permanent Global 3D Cubes Grid Animation across entire site */}
+        <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
+          <BackgroundCubesGrid
+            className="w-full h-full pointer-events-none"
+            cellSize={120}
+            topColor="#FAF9F5"
+            leftColor="#ECE6DA"
+            rightColor="#DFD8CB"
+            glowColor="#217E66"
+            glow={0.5}
+            amplitude={0.65}
+            speed={7}
+            idleRipples={true}
+          />
+        </div>
+
         <Navbar />
-        <div className="flex-1">{children}</div>
+        <div className="flex-1 relative z-0">{children}</div>
         <Footer />
       </body>
     </html>

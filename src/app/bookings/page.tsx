@@ -259,119 +259,118 @@ function BookingHistoryContent() {
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#E5DFD2] pb-6">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#EBF4F3] text-[#0D4A52] mb-2">
-            <CalendarClock className="w-3.5 h-3.5 text-[#217E66]" />
-            <span>Verified Customer Bookings</span>
+      {/* First Card: Booking History Header */}
+      <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 sm:p-8 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#152220] tracking-tight">
+              Booking History
+            </h1>
+            <p className="text-sm text-[#576563] mt-1">
+              Track and review all your service bookings, assigned professionals, price agreements, and ratings.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#152220] tracking-tight">
-            Booking History
-          </h1>
-          <p className="text-sm text-[#576563] mt-1">
-            Track and review all your service bookings, assigned professionals, price agreements, and ratings.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={fetchBookings}
-            disabled={loadingBookings}
-            className="flex items-center gap-1.5"
-            title="Refresh bookings"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingBookings ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </Button>
-          <Link href="/post-job">
-            <Button variant="primary" size="sm" className="flex items-center gap-1.5 shadow-sm">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Book New Service</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={fetchBookings}
+              disabled={loadingBookings}
+              className="flex items-center gap-1.5"
+              title="Refresh bookings"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingBookings ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
             </Button>
-          </Link>
+            <Link href="/post-job">
+              <Button variant="primary" size="sm" className="shadow-sm">
+                <span>Book New Service</span>
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#E5DFD2]/60 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setActiveFilter('all')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeFilter === 'all'
-              ? 'bg-[#0D4A52] text-white shadow-sm'
-              : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
-          }`}
-        >
-          <span>All Bookings</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-              activeFilter === 'all' ? 'bg-white/20 text-white' : 'bg-[#EBF4F3] text-[#0D4A52]'
+      {/* Second Card: Filter Tabs Long Card */}
+      <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-4 sm:p-5 shadow-xl">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('all')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeFilter === 'all'
+                ? 'bg-[#0D4A52] text-white shadow-sm'
+                : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
             }`}
           >
-            {bookings.length}
-          </span>
-        </button>
+            <span>All Bookings</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                activeFilter === 'all' ? 'bg-white/20 text-white' : 'bg-[#EBF4F3] text-[#0D4A52]'
+              }`}
+            >
+              {bookings.length}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveFilter('active')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeFilter === 'active'
-              ? 'bg-[#0D4A52] text-white shadow-sm'
-              : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
-          }`}
-        >
-          <span>Upcoming & Active</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-              activeFilter === 'active' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+          <button
+            type="button"
+            onClick={() => setActiveFilter('active')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeFilter === 'active'
+                ? 'bg-[#0D4A52] text-white shadow-sm'
+                : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
             }`}
           >
-            {countActive}
-          </span>
-        </button>
+            <span>Upcoming & Active</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                activeFilter === 'active' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {countActive}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveFilter('completed')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeFilter === 'completed'
-              ? 'bg-[#0D4A52] text-white shadow-sm'
-              : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
-          }`}
-        >
-          <span>Completed</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-              activeFilter === 'completed' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+          <button
+            type="button"
+            onClick={() => setActiveFilter('completed')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeFilter === 'completed'
+                ? 'bg-[#0D4A52] text-white shadow-sm'
+                : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
             }`}
           >
-            {countCompleted}
-          </span>
-        </button>
+            <span>Completed</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                activeFilter === 'completed' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+              }`}
+            >
+              {countCompleted}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveFilter('cancelled')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeFilter === 'cancelled'
-              ? 'bg-[#0D4A52] text-white shadow-sm'
-              : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
-          }`}
-        >
-          <span>Cancelled</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-              activeFilter === 'cancelled' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800'
+          <button
+            type="button"
+            onClick={() => setActiveFilter('cancelled')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeFilter === 'cancelled'
+                ? 'bg-[#0D4A52] text-white shadow-sm'
+                : 'bg-white text-[#576563] border border-[#E5DFD2] hover:bg-[#F3EFE6] hover:text-[#152220]'
             }`}
           >
-            {countCancelled}
-          </span>
-        </button>
+            <span>Cancelled</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                activeFilter === 'cancelled' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800'
+              }`}
+            >
+              {countCancelled}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Error Alert */}
@@ -394,7 +393,7 @@ function BookingHistoryContent() {
           {[1, 2, 3].map((idx) => (
             <div
               key={idx}
-              className="bg-white rounded-xl border border-[#E5DFD2] p-5 shadow-sm animate-pulse space-y-4"
+              className="bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 shadow-xl animate-pulse space-y-4"
             >
               <div className="flex items-center justify-between">
                 <div className="h-5 bg-gray-200 rounded w-1/3" />
@@ -413,7 +412,7 @@ function BookingHistoryContent() {
 
       {/* Empty State */}
       {!loadingBookings && filteredBookings.length === 0 && (
-        <Card className="text-center py-12 px-4 space-y-4">
+        <Card className="bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] text-center py-12 px-4 space-y-4 shadow-xl">
           <div className="w-14 h-14 rounded-full bg-[#EBF4F3] flex items-center justify-center mx-auto text-[#0D4A52]">
             <CalendarClock className="w-7 h-7 text-[#217E66]" />
           </div>
@@ -458,7 +457,7 @@ function BookingHistoryContent() {
               <Card
                 key={booking.id}
                 hoverEffect
-                className="p-5 sm:p-6 transition-all duration-200 border-[#E5DFD2] hover:border-[#217E66]/40"
+                className="bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 sm:p-7 shadow-xl transition-all duration-200 hover:border-[#217E66]/40"
               >
                 <div className="space-y-4">
                   {/* Top Bar: Title, Category, Status */}

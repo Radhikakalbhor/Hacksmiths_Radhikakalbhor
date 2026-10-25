@@ -17,15 +17,12 @@ import {
   Briefcase,
   User,
   Compass,
-  ShieldCheck,
-  MapPin,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
   SERVICE_CATEGORIES,
   OTHER_CUSTOM_CATEGORY,
-  getCategoryDurationEstimate,
 } from '@/lib/config/constants';
 import { ServiceCategory, JobUrgency } from '@/types/jobs';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -46,7 +43,6 @@ interface DraftData {
   latitude: number | null;
   longitude: number | null;
   estimatedBudgetInr: string;
-  isAutoTitle?: boolean;
 }
 
 function PostJobForm() {
@@ -80,16 +76,12 @@ function PostJobForm() {
 
   const [customCategoryName, setCustomCategoryName] = useState(() => initialDraft.customCategoryName || '');
 
-  // Track whether the title was auto-generated or manually edited
-  const [isAutoTitle, setIsAutoTitle] = useState(() => {
-    if (initialDraft.isAutoTitle !== undefined) return initialDraft.isAutoTitle;
-    return !initialDraft.title;
-  });
-
   const [title, setTitle] = useState(() => {
-    if (initialDraft.title) return initialDraft.title;
-    const catMeta = SERVICE_CATEGORIES.find((c) => c.id === 'plumbing');
-    return catMeta ? catMeta.name : 'Plumbing';
+    const draftTitle = initialDraft.title || '';
+    const isCategoryMatch =
+      SERVICE_CATEGORIES.some((c) => c.name.toLowerCase() === draftTitle.toLowerCase()) ||
+      draftTitle.toLowerCase() === 'plumbing';
+    return isCategoryMatch ? '' : draftTitle;
   });
 
   const [description, setDescription] = useState(() => initialDraft.description || '');
@@ -104,27 +96,14 @@ function PostJobForm() {
   const [locationStatusMsg, setLocationStatusMsg] = useState<string | null>(null);
   const [estimatedBudgetInr, setEstimatedBudgetInr] = useState(() => initialDraft.estimatedBudgetInr || '');
 
-  // Handler for category selection with automatic title update
+  // Handler for category selection
   const handleCategorySelect = (selectedCatId: ServiceCategory) => {
     setCategory(selectedCatId);
-    if (isAutoTitle) {
-      if (selectedCatId === 'other') {
-        setTitle(customCategoryName.trim() || 'Custom Service');
-      } else {
-        const catMeta = SERVICE_CATEGORIES.find((c) => c.id === selectedCatId);
-        if (catMeta) {
-          setTitle(catMeta.name);
-        }
-      }
-    }
   };
 
   // Handler for custom category name change
   const handleCustomCategoryNameChange = (val: string) => {
     setCustomCategoryName(val);
-    if (isAutoTitle && category === 'other') {
-      setTitle(val.trim() || 'Custom Service');
-    }
   };
 
   // Local Micro-Market Pricing Benchmark
@@ -330,7 +309,6 @@ function PostJobForm() {
         latitude,
         longitude,
         estimatedBudgetInr,
-        isAutoTitle,
       };
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
     } catch {
@@ -349,7 +327,6 @@ function PostJobForm() {
     latitude,
     longitude,
     estimatedBudgetInr,
-    isAutoTitle,
   ]);
 
   // Selected category benchmark lookup
@@ -456,7 +433,6 @@ function PostJobForm() {
           latitude,
           longitude,
           estimatedBudgetInr,
-          isAutoTitle,
         };
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
       } catch {
@@ -663,10 +639,10 @@ function PostJobForm() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-[#E5DFD2] p-6 sm:p-10 shadow-sm space-y-8">
+    <div className="max-w-3xl mx-auto bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 sm:p-10 shadow-xl space-y-8">
       {/* Header */}
-      <div className="space-y-3 border-b border-[#E5DFD2] pb-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 border-b border-[#E5DFD2] pb-6">
+        <div className="flex items-center justify-between gap-4">
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#576563] hover:text-[#0D4A52] transition-colors"
@@ -674,18 +650,19 @@ function PostJobForm() {
             <ArrowLeft className="w-4 h-4" />
             <span>Back</span>
           </Link>
-          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#EDF7F4] text-[#217E66] border border-[#BCE5DA]">
-            Zero Middleman Markup
-          </span>
+
+          {authState === 'customer' && customerName && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#EDF7F4] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52] shadow-2xs">
+              <User className="w-3.5 h-3.5 text-[#217E66]" />
+              <span>{customerName}</span>
+            </div>
+          )}
         </div>
 
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#152220] tracking-tight">
             Create a Service Request
           </h1>
-          <p className="text-xs sm:text-sm text-[#576563] mt-1">
-            Specify your home repair or maintenance task to receive direct bids from vetted neighborhood workers.
-          </p>
         </div>
 
         {/* Role & Auth Status Banners */}
@@ -727,20 +704,6 @@ function PostJobForm() {
             >
               Go to Marketplace
             </Link>
-          </div>
-        )}
-
-        {authState === 'customer' && customerName && (
-          <div className="p-2.5 bg-[#EDF7F4] border border-[#BCE5DA] rounded-xl flex items-center justify-between text-xs text-[#217E66]">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-[#217E66]" />
-              <span>
-                Posting as <strong>{customerName}</strong> (Verified Customer Account)
-              </span>
-            </div>
-            <Badge variant="green" className="text-[10px]">
-              Active Session
-            </Badge>
           </div>
         )}
       </div>
@@ -818,53 +781,71 @@ function PostJobForm() {
             </div>
           )}
 
-          {/* Benchmark & Indicative Duration Guidance Pill */}
-          {currentCategoryMeta && (
-            <div className="mt-2 p-2.5 rounded-lg bg-[#FAF9F5] border border-[#E5DFD2] flex flex-wrap items-center justify-between gap-1 text-[11px] text-[#576563]">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#217E66]" />
-                <span>Indicative Local Rate &amp; Duration:</span>
-              </span>
-              <span className="font-semibold text-[#0D4A52]">
-                ₹{currentCategoryMeta.typicalBenchmarkRangeInr[0]} – ₹
-                {currentCategoryMeta.typicalBenchmarkRangeInr[1]} •{' '}
-                <span className="text-[#217E66]">
-                  typically {getCategoryDurationEstimate(category)}
-                </span>{' '}
-                <span className="text-[10px] font-normal text-[#83928E]">(indicative estimate)</span>
-              </span>
-            </div>
-          )}
         </div>
 
-        {/* 2. Job Title & Problem Description */}
+        {/* 2. Job Title & Fault Photo Side-by-Side */}
         <div className="space-y-4">
           <label className="block text-xs font-bold uppercase tracking-wider text-[#152220]">
             2. Describe the Task <span className="text-red-500">*</span>
           </label>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-[#152220]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            {/* Left side: Job Title / Brief Summary */}
+            <div>
+              <label className="block text-xs font-semibold text-[#152220] mb-1">
                 Job Title / Brief Summary <span className="text-red-500">*</span>
               </label>
-              {isAutoTitle && (
-                <span className="text-[10px] text-[#217E66] font-medium bg-[#EDF7F4] px-1.5 py-0.5 rounded">
-                  Auto-filled from category
-                </span>
+              <input
+                type="text"
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Bathroom tap continuous leakage and spindle repair"
+                className="w-full p-3 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none"
+              />
+            </div>
+
+            {/* Right side: Photo of Fault (Optional) */}
+            <div>
+              <label className="block text-xs font-semibold text-[#152220] mb-1">
+                Photo of Fault <span className="text-[#83928E] font-normal">(Optional)</span>
+              </label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handlePhotoSelect}
+                className="hidden"
+                id="job-photo-upload"
+              />
+              {!photoPreview ? (
+                <label
+                  htmlFor="job-photo-upload"
+                  className="w-full h-[42px] px-3 rounded-xl border border-dashed border-[#E5DFD2] hover:border-[#0D4A52] bg-[#FAF9F5] text-xs text-[#576563] flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Camera className="w-4 h-4 text-[#0D4A52]" />
+                  <span>Upload Fault Picture</span>
+                </label>
+              ) : (
+                <div className="relative flex items-center gap-2.5 h-[42px] px-2.5 bg-[#FAF9F5] border border-[#E5DFD2] rounded-xl">
+                  <img
+                    src={photoPreview}
+                    alt="Fault preview"
+                    className="w-7 h-7 object-cover rounded-lg shrink-0"
+                  />
+                  <span className="text-[11px] text-[#152220] truncate flex-1">
+                    {photoFileName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="p-1 rounded-full text-[#83928E] hover:text-red-600 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
             </div>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setIsAutoTitle(false);
-              }}
-              placeholder="e.g. Bathroom tap continuous leakage and spindle repair"
-              className="w-full p-3 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none"
-            />
           </div>
 
           <div>
@@ -922,11 +903,11 @@ function PostJobForm() {
               type="button"
               onClick={handleGetLocation}
               disabled={locating}
-              className="inline-flex items-center gap-1.5 text-xs text-[#0D4A52] font-semibold hover:underline"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#EBF4F3] border border-[#BCE5DA] text-xs text-[#0D4A52] font-semibold hover:bg-[#D8ECE8] transition-colors"
             >
               {locating ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0D4A52]" />
                   <span>Locating...</span>
                 </>
               ) : (
@@ -981,81 +962,11 @@ function PostJobForm() {
               />
             </div>
           </div>
-
-          {latitude && longitude ? (
-            <div className="flex items-center justify-between bg-[#EBF4F3] p-2.5 rounded-xl border border-[#BCE5DA] text-[11px] text-[#217E66] font-medium animate-in fade-in">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  {locationStatusMsg || 'Address found'}: {city || 'Location confirmed'}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowManualCoords(!showManualCoords)}
-                className="text-xs text-[#0D4A52] underline hover:text-[#217E66]"
-              >
-                {showManualCoords ? 'Hide Coordinates' : 'Edit Coordinates'}
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between bg-[#F8F6F0] p-2.5 rounded-xl border border-[#E5DFD2] text-[11px] text-[#655D50]">
-              <span className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#D97706] shrink-0" />
-                <span>Click "Use Current GPS Location" or enter your address.</span>
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleGetLocation}
-                  disabled={locating}
-                  className="text-[#0D4A52] font-semibold underline hover:text-[#217E66] cursor-pointer"
-                >
-                  {locating ? 'Locating...' : 'Detect Address'}
-                </button>
-                <span className="text-[#B5AE9E]">|</span>
-                <button
-                  type="button"
-                  onClick={() => setShowManualCoords(!showManualCoords)}
-                  className="text-[#655D50] underline hover:text-[#152220] cursor-pointer"
-                >
-                  Manual
-                </button>
-              </div>
-            </div>
-          )}
-
-          {showManualCoords && (
-            <div className="grid grid-cols-2 gap-3 p-3 bg-[#F8F6F0] rounded-xl border border-[#E5DFD2]">
-              <div>
-                <label className="block text-[11px] font-medium text-[#655D50] mb-1">Latitude (6 to 38)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={latitude ?? ''}
-                  onChange={(e) => setLatitude(e.target.value ? parseFloat(e.target.value) : null)}
-                  placeholder="e.g. 19.0760"
-                  className="w-full p-2 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] outline-none bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-[#655D50] mb-1">Longitude (68 to 98)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={longitude ?? ''}
-                  onChange={(e) => setLongitude(e.target.value ? parseFloat(e.target.value) : null)}
-                  placeholder="e.g. 72.8777"
-                  className="w-full p-2 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] outline-none bg-white"
-                />
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* 5. Optional Budget & Photo Attachment */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-[#E5DFD2]">
-          <div>
+        {/* 5. Optional Budget */}
+        <div className="pt-2 border-t border-[#E5DFD2]">
+          <div className="max-w-md">
             <label className="block text-xs font-semibold text-[#152220] mb-1">
               Estimated Budget (₹ INR, Optional)
             </label>
@@ -1071,77 +982,26 @@ function PostJobForm() {
               />
             </div>
             {benchmark && (
-              <div className="mt-2 p-2.5 bg-[#FAF9F5] border border-[#BCE5DA] rounded-xl flex items-center justify-between text-xs animate-in fade-in">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <Sparkles className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
-                  <span className="text-[#576563] text-[11px] truncate">
-                    Fair Market ({benchmark.area}):{' '}
-                    <strong className="text-[#152220]">₹{benchmark.min}–₹{benchmark.max}</strong>
-                    {' '}• typically <strong className="text-[#217E66]">{getCategoryDurationEstimate(category)}</strong>{' '}
-                    <span className="text-[10px] text-[#83928E]">(indicative estimate)</span>
-                  </span>
-                </div>
-                {!estimatedBudgetInr && (
-                  <button
-                    type="button"
-                    onClick={() => setEstimatedBudgetInr(benchmark.median.toString())}
-                    className="text-[11px] font-bold text-[#0D4A52] hover:text-[#072F35] underline ml-2 shrink-0"
-                  >
-                    Use ₹{benchmark.median}
-                  </button>
-                )}
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEstimatedBudgetInr(benchmark.median.toString())}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EDF7F4] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52] hover:bg-[#D8ECE8] transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#217E66]" />
+                  <span>Fair Price: ₹{benchmark.median}</span>
+                  {!estimatedBudgetInr && (
+                    <span className="text-[11px] text-[#217E66] font-normal underline ml-1">
+                      (Use ₹{benchmark.median})
+                    </span>
+                  )}
+                </button>
               </div>
             )}
             {loadingBenchmark && (
               <p className="text-[10px] text-[#83928E] mt-1 flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Checking local price benchmarks...</span>
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#152220] mb-1">
-              Photo of Fault (Optional)
-            </label>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              onChange={handlePhotoSelect}
-              className="hidden"
-              id="job-photo-upload"
-            />
-            {!photoPreview ? (
-              <label
-                htmlFor="job-photo-upload"
-                className="w-full py-2.5 px-3 rounded-xl border border-dashed border-[#E5DFD2] hover:border-[#0D4A52] bg-[#FAF9F5] text-xs text-[#576563] flex items-center justify-center gap-2 cursor-pointer transition-colors"
-              >
-                <Camera className="w-4 h-4 text-[#0D4A52]" />
-                <span>Upload Fault Picture</span>
-              </label>
-            ) : (
-              <div className="relative flex items-center gap-3 p-2 bg-[#FAF9F5] border border-[#E5DFD2] rounded-xl">
-                <img
-                  src={photoPreview}
-                  alt="Fault preview"
-                  className="w-10 h-10 object-cover rounded-lg"
-                />
-                <span className="text-[11px] text-[#152220] truncate max-w-[120px]">
-                  {photoFileName}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleRemovePhoto}
-                  className="ml-auto p-1 rounded-full text-[#83928E] hover:text-red-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-            {photoPreview && (
-              <p className="text-[10px] text-[#83928E] mt-1.5">
-                Photo attached. (Note: Cloud storage bucket `job-photos` is not configured in Supabase Storage, so photo preview is retained locally with your request specifications.)
               </p>
             )}
           </div>
@@ -1218,16 +1078,11 @@ function PostJobForm() {
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4 text-emerald-300" />
                   <span>Post Job &amp; Receive Worker Bids</span>
                 </>
               )}
             </Button>
           )}
-
-          <p className="text-[11px] text-center text-[#576563]">
-            Protected by Sahayak Two-Stage OTP Handshake. No upfront payment required.
-          </p>
         </div>
       </form>
     </div>
@@ -1236,7 +1091,7 @@ function PostJobForm() {
 
 export default function PostJobPage() {
   return (
-    <div className="min-h-[85vh] py-12 px-4 sm:px-6 lg:px-8 bg-[#FAF9F5]">
+    <div className="min-h-[85vh] py-12 px-4 sm:px-6 lg:px-8 bg-transparent">
       <Suspense fallback={<div className="text-center text-xs text-[#576563]">Loading Job Creator...</div>}>
         <PostJobForm />
       </Suspense>

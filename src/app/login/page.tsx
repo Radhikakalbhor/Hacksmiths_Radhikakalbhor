@@ -442,21 +442,9 @@ function LoginContent() {
   };
 
   return (
-    <div className="max-w-lg w-full bg-white rounded-2xl border border-[#E5DFD2] p-6 sm:p-8 shadow-sm space-y-6">
+    <div className="max-w-lg w-full bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 sm:p-8 shadow-xl space-y-6">
       {/* Header Banner */}
       <div className="text-center space-y-2">
-        <div className="w-14 h-14 mx-auto rounded-2xl bg-[#EBF4F3] flex items-center justify-center text-[#0D4A52]">
-          {role === 'worker' ? (
-            <UserCheck className="w-7 h-7 text-[#217E66]" />
-          ) : (
-            <ShieldCheck className="w-7 h-7 text-[#0D4A52]" />
-          )}
-        </div>
-
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#EDF7F4] text-[#217E66] border border-[#BCE5DA]">
-          <span>{role === 'worker' ? 'Sahayak Partner Network' : 'Customer & Household Portal'}</span>
-        </div>
-
         <h1 className="text-2xl font-extrabold text-[#152220] tracking-tight">
           {role === 'worker'
             ? isRegisteringWorker
@@ -602,48 +590,25 @@ function LoginContent() {
             </svg>
           )}
           <span>
-            {role === 'worker'
-              ? isRegisteringWorker
-                ? 'Register with Google as Partner'
-                : 'Sign in with Google as Partner'
-              : 'Continue with Google'}
+            {isRegisteringWorker ? 'Register with Google' : 'Sign in with Google'}
           </span>
         </button>
-
-        <div className="relative flex items-center justify-center my-2">
-          <div className="border-t border-[#E5DFD2] w-full" />
-          <span className="bg-white px-3 text-[11px] uppercase tracking-wider text-[#83928E] font-medium absolute">
-            or continue with email
-          </span>
-        </div>
       </div>
 
-      {/* Authentication Method Selector (OTP / Magic Link vs Password) */}
-      <div className="flex items-center justify-between text-xs text-[#576563] px-1">
-        <span>Preferred Login Method:</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setAuthMode('otp')}
-            className={`px-2.5 py-1 rounded-md transition-colors ${
-              authMode === 'otp'
-                ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold'
-                : 'hover:text-[#152220]'
-            }`}
-          >
-            Email OTP / Magic Link
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode('password')}
-            className={`px-2.5 py-1 rounded-md transition-colors ${
-              authMode === 'password'
-                ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold'
-                : 'hover:text-[#152220]'
-            }`}
-          >
-            Password
-          </button>
+      {/* Email OTP Section Title */}
+      <div className="pt-2 border-t border-[#E5DFD2]">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-[#152220]">
+              Or continue with email
+            </h2>
+            <p className="text-[11px] text-[#576563]">
+              We&apos;ll send a 6-digit OTP code directly to your email
+            </p>
+          </div>
+          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EBF4F3] text-[#0D4A52] border border-[#BCE5DA]">
+            Email OTP
+          </span>
         </div>
       </div>
 
@@ -969,7 +934,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#FAF9F5]">
+    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-transparent">
       <Suspense fallback={<div className="text-xs text-[#576563]">Loading Authentication Portal...</div>}>
         <LoginContent />
       </Suspense>
