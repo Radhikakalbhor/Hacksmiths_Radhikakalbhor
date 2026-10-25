@@ -212,7 +212,7 @@ function LoginContent() {
         setOtpRequestedAt(Date.now());
         setOtpRequestedEmail(cleanEmail);
         setSuccessMsg(
-          `An 8-digit numeric verification code has been requested for ${cleanEmail}. Please check your inbox and enter all 8 digits below.`
+          `An ${SUPABASE_OTP_LENGTH}-digit numeric verification code has been requested for ${cleanEmail}. Please check your inbox and enter all ${SUPABASE_OTP_LENGTH} digits below.`
         );
       }
     } catch (err) {
