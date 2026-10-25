@@ -12,7 +12,6 @@ export function WorkerReputationPreview() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           {/* Left Narrative */}
           <div className="lg:col-span-6 space-y-6">
-            <Badge variant="teal">Worker Dignity & Passport</Badge>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-[#152220] tracking-tight leading-tight">
               A portable reputation passport for every honest worker
             </h2>
@@ -66,22 +65,17 @@ export function WorkerReputationPreview() {
           <div className="lg:col-span-6">
             <Card className="bg-[#FAF9F5] border-[#E5DFD2] p-6 sm:p-8 relative shadow-sm">
               <div className="flex items-start justify-between border-b border-[#E5DFD2] pb-5">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-[#0D4A52] flex items-center justify-center text-white font-bold text-2xl shadow-sm">
-                    आर
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-[#152220]">Rameshwar Kumar</h3>
+                    <span className="p-0.5 rounded-full bg-[#217E66] text-white">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                    </span>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-bold text-[#152220]">Rameshwar Kumar</h3>
-                      <span className="p-0.5 rounded-full bg-[#217E66] text-white">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#217E66] font-medium">Master Plumber & Pipe Fitter</p>
-                    <div className="flex items-center gap-1 text-[11px] text-[#576563] mt-0.5">
-                      <MapPin className="w-3 h-3 text-[#0D4A52]" />
-                      <span>Dwarka Sector 7, Delhi (Serves within 7 km)</span>
-                    </div>
+                  <p className="text-xs text-[#217E66] font-medium">Master Plumber & Pipe Fitter</p>
+                  <div className="flex items-center gap-1 text-[11px] text-[#576563] mt-0.5">
+                    <MapPin className="w-3 h-3 text-[#0D4A52]" />
+                    <span>Andheri West, Mumbai (Serves within 7 km)</span>
                   </div>
                 </div>
 
@@ -136,7 +130,7 @@ export function WorkerReputationPreview() {
               <div className="mt-5 p-3 rounded-xl bg-white border border-[#E5DFD2] text-xs text-[#576563] italic">
                 &quot;Rameshwar arrived 5 mins ahead of schedule, solved the continuous concealed tank leak, and charged exactly the benchmark median ₹350 without drama.&quot;
                 <span className="block not-italic font-semibold text-[#152220] text-[11px] mt-1">
-                  — Priya S., Dwarka Sector 6
+                  — Priya S., Andheri West, Mumbai
                 </span>
               </div>
             </Card>

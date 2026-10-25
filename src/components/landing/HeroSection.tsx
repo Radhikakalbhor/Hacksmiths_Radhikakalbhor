@@ -325,7 +325,7 @@ export function HeroSection() {
                   value={jobText}
                   onChange={(e) => setJobText(e.target.value)}
                   rows={3}
-                  placeholder="E.g., Need an electrician to install 2 ceiling fans and repair a sparking switchboard in Dwarka Sector 10..."
+                  placeholder="E.g., Need an electrician to install 2 ceiling fans and repair a sparking switchboard in Andheri West, Mumbai..."
                   className="w-full p-3 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] focus:border-transparent outline-none resize-none bg-[#FAF9F5]"
                 />
                 <div className="flex items-center justify-between text-[11px] text-[#576563]">

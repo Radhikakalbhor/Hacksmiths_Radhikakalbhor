@@ -78,10 +78,12 @@ function PostJobForm() {
 
   const [title, setTitle] = useState(() => {
     const draftTitle = initialDraft.title || '';
-    const isCategoryMatch =
-      SERVICE_CATEGORIES.some((c) => c.name.toLowerCase() === draftTitle.toLowerCase()) ||
-      draftTitle.toLowerCase() === 'plumbing';
-    return isCategoryMatch ? '' : draftTitle;
+    if (draftTitle) return draftTitle;
+    if (urlCategory) {
+      const match = SERVICE_CATEGORIES.find((c) => c.id === urlCategory);
+      if (match) return match.name;
+    }
+    return '';
   });
 
   const [description, setDescription] = useState(() => initialDraft.description || '');
@@ -96,14 +98,25 @@ function PostJobForm() {
   const [locationStatusMsg, setLocationStatusMsg] = useState<string | null>(null);
   const [estimatedBudgetInr, setEstimatedBudgetInr] = useState(() => initialDraft.estimatedBudgetInr || '');
 
-  // Handler for category selection
+  // Handler for category selection - automatically syncs with job title
   const handleCategorySelect = (selectedCatId: ServiceCategory) => {
     setCategory(selectedCatId);
+    if (selectedCatId === 'other') {
+      setTitle(customCategoryName.trim());
+    } else {
+      const selectedCat = SERVICE_CATEGORIES.find((c) => c.id === selectedCatId);
+      if (selectedCat) {
+        setTitle(selectedCat.name);
+      }
+    }
   };
 
   // Handler for custom category name change
   const handleCustomCategoryNameChange = (val: string) => {
     setCustomCategoryName(val);
+    if (category === 'other') {
+      setTitle(val);
+    }
   };
 
   // Local Micro-Market Pricing Benchmark
