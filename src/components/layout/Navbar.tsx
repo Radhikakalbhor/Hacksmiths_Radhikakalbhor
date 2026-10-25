@@ -8,7 +8,7 @@ import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'motion/
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { LiquidMetalButton } from '@/components/ui/liquid-metal-button';
 
-export function Navbar() {
+function NavbarContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const pathname = usePathname();
@@ -276,3 +276,86 @@ export function Navbar() {
     </AnimatePresence>
   );
 }
+
+export function NavbarFallback() {
+  return (
+    <header className="sticky top-0 z-50 w-full bg-transparent">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-18">
+          {/* Brand Name & Tagline */}
+          <Link href="/" className="flex flex-col group">
+            <span className="font-extrabold text-2xl text-[#0D4A52] tracking-tight group-hover:text-[#072F35] transition-colors">
+              Sahayak
+            </span>
+            <p className="text-[11px] text-[#576563] hidden sm:block">Trusted help. Fair work.</p>
+          </Link>
+
+          {/* Desktop Nav Links */}
+          <nav className="hidden md:flex items-center p-1 bg-white/95 backdrop-blur-sm border border-[#E5DFD2] rounded-full shadow-xs gap-0.5 lg:gap-1">
+            <Link
+              href="/dashboard"
+              className="text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80 transition-all whitespace-nowrap"
+            >
+              <Briefcase className="w-3.5 h-3.5 text-[#217E66]" />
+              <span>Marketplace & Jobs</span>
+            </Link>
+
+            <Link
+              href="/bookings"
+              className="text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80 transition-all whitespace-nowrap"
+            >
+              <CalendarClock className="w-3.5 h-3.5 text-[#217E66]" />
+              <span>Booking History</span>
+            </Link>
+
+            <Link
+              href="/services"
+              className="text-xs lg:text-sm font-medium px-3 py-1.5 rounded-full text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80 transition-all whitespace-nowrap"
+            >
+              Services
+            </Link>
+
+            <Link
+              href="/fair-pricing"
+              className="text-xs lg:text-sm font-medium px-3 py-1.5 rounded-full text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80 transition-all whitespace-nowrap"
+            >
+              Fair Pricing
+            </Link>
+
+            <Link
+              href="/safety"
+              className="text-xs lg:text-sm font-medium px-3 py-1.5 rounded-full text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80 transition-all whitespace-nowrap"
+            >
+              Safety & OTP
+            </Link>
+          </nav>
+
+          {/* Desktop Action Buttons */}
+          <div className="hidden md:flex items-center gap-3">
+            <LiquidMetalButton
+              href="/login"
+              label="Sign In"
+              width={92}
+            />
+          </div>
+
+          {/* Mobile menu toggle */}
+          <div className="flex md:hidden">
+            <div className="p-2 rounded-lg text-[#576563]">
+              <Menu className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export function Navbar() {
+  return (
+    <React.Suspense fallback={<NavbarFallback />}>
+      <NavbarContent />
+    </React.Suspense>
+  );
+}
+

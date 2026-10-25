@@ -5,10 +5,10 @@
 
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import type { NextRequest } from 'next/server';
 import { Database } from '@/types/database.types';
 
 export async function getSupabaseServerClient(request?: Request | null) {
-  const cookieStore = await cookies();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -17,6 +17,34 @@ export async function getSupabaseServerClient(request?: Request | null) {
   }
 
   const authHeader = request ? request.headers.get('authorization') : null;
+
+  // When request context is available (e.g. Route Handlers), read cookies from request context directly
+  const nextRequest = request && 'cookies' in request ? (request as NextRequest) : null;
+
+  if (nextRequest) {
+    return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: authHeader ? { Authorization: authHeader } : undefined,
+      },
+      cookies: {
+        getAll() {
+          return nextRequest.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value }) =>
+              nextRequest.cookies.set(name, value)
+            );
+          } catch {
+            // Cannot write cookies to incoming request; middleware handles refresh
+          }
+        },
+      },
+    });
+  }
+
+  // Fallback to next/headers cookies() for Server Components
+  const cookieStore = await cookies();
 
   return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     global: {
@@ -39,3 +67,4 @@ export async function getSupabaseServerClient(request?: Request | null) {
     },
   });
 }
+

@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { Navbar } from '@/components/layout/Navbar';
+import { Suspense } from 'react';
+import { Navbar, NavbarFallback } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { BackgroundCubesGrid } from '@/components/ui/background-cubes-grid';
 
@@ -61,7 +62,9 @@ export default function RootLayout({
           />
         </div>
 
-        <Navbar />
+        <Suspense fallback={<NavbarFallback />}>
+          <Navbar />
+        </Suspense>
         <div className="flex-1 relative z-0">{children}</div>
         <Footer />
       </body>

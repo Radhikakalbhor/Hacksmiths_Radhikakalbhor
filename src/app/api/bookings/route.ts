@@ -206,7 +206,14 @@ export async function GET(request: NextRequest) {
 
     return apiSuccess<BookingHistoryItem[]>(bookingItems);
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'digest' in err && (err as { digest: string }).digest === 'NEXT_PRERENDER_INTERRUPTED') {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'digest' in err &&
+      typeof (err as { digest?: unknown }).digest === 'string' &&
+      ((err as { digest: string }).digest.startsWith('NEXT_') ||
+       (err as { digest: string }).digest.startsWith('DYNAMIC_'))
+    ) {
       throw err;
     }
     const message = err instanceof Error ? err.message : 'Internal server error';
