@@ -3,15 +3,19 @@
  * Enforces strict role boundary separation at the Edge / Network level.
  *
  * Rules:
- * 1. Worker Pages (/worker/*, /dashboard):
+ * 1. Admin Pages (/admin/*):
+ *    - Unauthenticated -> /login?redirect=/admin/*
+ *    - Authenticated non-admin or suspended -> /
+ *    - Authenticated Admin -> Allow through
+ * 2. Worker Pages (/worker/*, /dashboard):
  *    - Unauthenticated -> /login?role=worker
  *    - Authenticated Customer -> /post-job
  *    - Authenticated Worker/Admin -> Allow through
- * 2. Customer Pages (/post-job, /bookings, /my-jobs, /booking-history):
+ * 3. Customer Pages (/post-job, /bookings, /my-jobs, /booking-history):
  *    - Authenticated Worker -> /worker/dashboard
- * 3. Public Pages (/, /login, /services, /fair-pricing, /safety, /auth/callback):
+ * 4. Public Pages (/, /login, /services, /fair-pricing, /safety, /auth/callback):
  *    - Allowed through without restriction
- * 4. API Routes (/api/*):
+ * 5. API Routes (/api/*):
  *    - Delegated to route handlers (preserves JSON error responses)
  */
 
@@ -29,7 +33,19 @@ export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  const pathname = request.nextUrl.pathname;
+
+  // Skip API routes and Next.js internal paths
+  if (pathname.startsWith('/api') || pathname.startsWith('/_next')) {
+    return response;
+  }
+
   if (!supabaseUrl || !supabaseAnonKey) {
+    if (pathname.startsWith('/admin')) {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
     return response;
   }
 
@@ -51,17 +67,36 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const pathname = request.nextUrl.pathname;
-
-  // Skip API routes so route handlers can return structured JSON errors
-  if (pathname.startsWith('/api') || pathname.startsWith('/_next')) {
-    return response;
-  }
-
   // Check active session
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // 1. ADMIN ROUTE PROTECTION
+  if (pathname.startsWith('/admin')) {
+    if (!user) {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    const userRole = String(user.user_metadata?.role || '').toLowerCase();
+    if (userRole !== 'admin') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, is_suspended')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const profileRole = String(profile?.role || '').toLowerCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (profileRole !== 'admin' || (profile as any)?.is_suspended) {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
+    }
+
+    return response;
+  }
 
   const isWorkerRoute =
     pathname === '/dashboard' ||
@@ -73,7 +108,7 @@ export async function middleware(request: NextRequest) {
     pathname === '/my-jobs' ||
     pathname === '/booking-history';
 
-  // If user is accessing worker-only routes
+  // 2. WORKER ROUTE PROTECTION
   if (isWorkerRoute) {
     if (!user) {
       // Unauthenticated visitor -> Redirect to worker login
@@ -100,7 +135,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // If authenticated user is accessing customer routes
+  // 3. CUSTOMER ROUTE PROTECTION
   if (isCustomerRoute && user) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -133,4 +168,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js)$).*)',
   ],
 };
-

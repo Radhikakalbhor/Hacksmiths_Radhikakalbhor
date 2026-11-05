@@ -3,7 +3,7 @@
  * Supports Customer, Worker, and Admin access levels.
  */
 
-export type UserRole = 'customer' | 'worker' | 'admin';
+export type UserRole = 'customer' | 'worker' | 'admin' | 'ADMIN';
 
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended';
 
@@ -16,6 +16,8 @@ export interface UserProfile {
   role: UserRole;
   verificationStatus: VerificationStatus;
   primaryCity: string;
+  isSuspended?: boolean;
+  suspendedReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,4 +42,9 @@ export interface WorkerProfile extends UserProfile {
   backgroundCheckVerified: boolean;
   reputationScore: number; // 0.0 to 5.0
   totalCompletedJobs: number;
+}
+
+export interface AdminProfile extends UserProfile {
+  role: 'admin' | 'ADMIN';
+  permissions?: string[];
 }

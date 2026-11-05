@@ -14,7 +14,7 @@ export interface OAuthResolutionResult {
  * Pure function to resolve role and redirect destination securely.
  * Enforces zero-trust:
  * 1. Existing database roles are NEVER overwritten.
- * 2. New users can only be 'customer' or 'worker' (privilege escalation to 'admin' blocked).
+ * 2. New users can only be 'customer' or 'worker'.
  * 3. Redirect destinations are strictly role-bounded and open redirects prevented.
  * 4. Customers are redirected directly to /post-job; workers to /dashboard?role=worker.
  * 5. Workers must NEVER be redirected to /post-job.
@@ -39,7 +39,6 @@ export function resolveOAuthRoleAndDestination({
   let actualRole: UserRole | undefined;
 
   if (existingProfileRole) {
-    // CRITICAL SECURITY RULE: NEVER overwrite an existing user's role through an OAuth callback.
     finalRole = existingProfileRole;
 
     // Check for explicit role mismatch: User tried to sign in as Worker, but profile is Customer
@@ -49,7 +48,6 @@ export function resolveOAuthRoleAndDestination({
       actualRole = 'customer';
     }
   } else {
-    // New user registration: Sanitize requested role. Only 'customer' or 'worker' are permitted.
     finalRole = requestedRoleParam === 'worker' ? 'worker' : 'customer';
   }
 

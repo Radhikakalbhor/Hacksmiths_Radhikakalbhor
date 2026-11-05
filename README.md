@@ -183,15 +183,118 @@ Or run the targeted teardown block at the bottom of [`supabase/seed_demo_data.sq
 
 ---
 
+## 🛡️ Admin Panel & Operations Console (`/admin`)
+
+Sahayak features an enterprise-grade, zero-trust administrative control plane built with Next.js App Router, Tailwind CSS v4 design tokens (Deep Teal `#0D4A52`, Warm Off-White `#FAF9F5`, Emerald `#217E66`), Recharts analytics, and interactive OpenStreetMap/Leaflet geospatial discovery.
+
+### Key Features
+1. **Executive KPI & Operations Dashboard (`/admin`)**
+   - 8 Trend-indicated KPI cards (Customers, Workers, Active Jobs, Completed Jobs, GMV in INR, Rating, Pending Verifications, Open SOS).
+   - Interactive charts via **Recharts**: 7d/30d/90d line/area volume trends, category distribution, donut status distribution, and top area demand bars.
+   - **Dynamic Live Leaflet Map** rendering active service locations and nearby workers without external paid map APIs.
+   - **Rule-based Anomaly Alerts**: Flags bids deviating >40% from market benchmarks, chronic worker cancellations, and customer churn anomalies.
+   - **Top Partner Leaderboard** and live activity feed.
+
+2. **Worker Verification Queue (`/admin/verification`)**
+   - Unverified and pending worker document review table.
+   - Slide-out inspection drawer with document preview (Aadhaar, PAN, Trade Certificates).
+   - Manual Approve, Reject, and Request Info actions with mandatory reviewer notes. Setting verified status never occurs automatically.
+
+3. **Users Directory & Reputation Passport (`/admin/users`)**
+   - Filterable tabs for Customers and Partners with pagination, search, and CSV export.
+   - User detail dossier (`/admin/users/[id]`): Complete job history, reviews, and worker reputation passport.
+   - One-click Suspend, Reactivate, and Ban actions requiring written justification and audit logging.
+
+4. **Marketplace Jobs & Cryptographic OTP Milestones (`/admin/jobs`)**
+   - Searchable jobs table by status, category, pincode, and date.
+   - Job detail inspect view (`/admin/jobs/[id]`): Mini-map location, submitted bids list, and **Zero-Trust OTP Milestone state**. Raw plain-text OTPs are never stored or exposed; only SHA-256 milestone verification state is tracked.
+   - Administrative Force-Cancel and Flagging actions with audit logging.
+
+5. **Real-time SOS Safety Console (`/admin/sos`)**
+   - Live Supabase Realtime channel for instant emergency dispatch.
+   - Synthesized Web-Audio alert tone (no external media dependencies).
+   - Incident coordinates on Leaflet map, emergency contacts, job context, and trusted contacts.
+   - Acknowledge, Escalate, and Resolve workflow with internal emergency notes thread.
+
+6. **Dispute Resolution & AI Advisory (`/admin/disputes`)**
+   - Evidence timeline with job timestamps, milestone records, and party statements.
+   - **Gemini AI Dispute Summarizer**: Server-side advisory analysis synthesizing evidence into neutral findings and recommended remedies.
+   - Refund, Warn, Suspend, and Dismiss resolutions requiring written notes.
+
+7. **Review Moderation & AI Toxicity Scanner (`/admin/reviews`)**
+   - Queue of flagged customer reviews.
+   - **Gemini AI Toxicity Scanner**: Server-side batch scanner flagging abusive, threatening, or vulgar reviews with keyword fallback.
+   - Hide, Restore, and Delete actions with automatic worker reputation recalculation.
+
+8. **Micro-Market Pricing Benchmarks (`/admin/pricing`)**
+   - Editable benchmark matrix across trades and cities.
+   - Inline price editing with strict validation (`min <= typical <= max`).
+   - Comparison chart evaluating benchmarks against actual accepted marketplace bids.
+
+9. **Categories & Coverage Areas (`/admin/categories`)**
+   - Enable/disable trade categories with live toggle.
+   - Configure supported cities, coverage pincodes, and default dispatch radius.
+
+10. **Announcements Broadcast (`/admin/announcements`)**
+    - Broadcast composer targeting All Users, Partners, Customers, or specific cities.
+    - Historical dispatch log.
+
+11. **Immutable Admin Audit Trail (`/admin/audit-log`)**
+    - Tamper-evident audit log capturing every administrative mutation via `logAdminAction()`.
+    - Filterable by entity type and action, modal JSON metadata inspector, and CSV export.
+
+12. **System Health & Diagnostics (`/admin/system-health`)**
+    - Real-time latency probe, Supabase RLS verification, PostGIS spatial engine health, and Google Gemini configuration checks.
+
+13. **AI Voice & Scope Generation Telemetry (`/admin/ai-logs`)**
+    - Audit customer multimodal inputs (Hindi/Marathi voice audio transcripts, text prompts) alongside Gemini-generated task scopes with admin rating feedback.
+
+---
+
+### Database Migrations for the Admin Panel
+Run these migrations in order after `20261024000004`:
+1. `supabase/migrations/20261026000011_admin_panel_schema.sql`
+   - Adds `ADMIN` to role enum and profiles check.
+   - Creates `admin_audit_log`, `verification_documents`, `disputes`, `sos_incidents`, `review_flags`, `announcements`, `ai_job_logs`.
+   - Adds `is_suspended` and `suspended_reason` to `profiles`.
+   - Adds `is_current_admin()` helper and strict RLS zero-trust policies restricting read/write to admins.
+2. `supabase/migrations/20261026000012_admin_dashboard_stats_and_rpcs.sql`
+   - High-performance `admin_dashboard_stats` database RPC aggregating KPI trends and volume distributions in a single round-trip.
+
+### Creating Your First Admin User
+To promote a user to `ADMIN`, run the privileged service-role script:
+```bash
+# By email:
+npm run admin:promote admin@example.com
+
+# By Indian phone number:
+npm run admin:promote +919999000001
+
+# Or promote the demo admin:
+npm run admin:promote demo-admin@sahayak.demo.internal
+```
+
+### Seeding Fictional Admin Demo Data
+To seed realistic fictional 60-day jobs, unverified workers with documents, sample disputes, SOS alerts, and AI logs:
+```bash
+npm run seed:admin
+```
+
+---
+
 ## 📜 Available Scripts
 
 | Command | Description |
 |---|---|
 | `npm run dev` | Runs the Next.js development server with Turbopack |
-| `npm run build` | Builds the optimized production application |
+| `npm run build` | Builds the optimized production application with TypeScript verification |
 | `npm run start` | Starts the production server |
-| `npm run lint` | Runs ESLint over the entire codebase |
-| `npm run test` | Runs the automated unit & business logic test suite via `tsx --test` |
+| `npm run lint` | Runs ESLint over the codebase |
+| `npm run test` | Runs the automated unit & business logic test suite (161 tests across 42 suites) |
+| `npm run admin:promote <id>` | Promotes a profile to `ADMIN` using the Supabase Service Role |
+| `npm run seed:admin` | Seeds fictional `[DEMO]` data for admin panel exploration |
+| `node scripts/seed-demo.mjs` | Seeds initial marketplace customer and worker demo dataset |
+| `node scripts/teardown-demo.mjs` | Safely tears down `[DEMO]` records without touching real user data |
 
 ---
 
@@ -201,11 +304,11 @@ Or run the targeted teardown block at the bottom of [`supabase/seed_demo_data.sq
   - Modular directory structure, strict TypeScript types, Supabase utilities, and responsive landing page.
 - [x] **Phase 2: Database and Backend Foundation**
   - Supabase PostgreSQL schema with PostGIS spatial indexing, strict RLS zero-trust policies, salted cryptographic OTP verification, and server-side services.
-- [x] **Phase 3: Core Marketplace APIs** (Current)
+- [x] **Phase 3: Core Marketplace APIs**
   - Next.js App Router route handlers for customer jobs, worker discovery, bidding, counter-offers, and atomic bid acceptance (`accept_job_bid` RPC).
-- [ ] **Phase 4: AI Multimodal Job Posting**
-  - Google Gemini API integration for audio voice-note transcription, image fault diagnosis, and auto-generated task scopes.
-- [ ] **Phase 5: OTP Handshake & Trust Safety**
-  - Start OTP and Completion OTP state machine verification, 1-tap SOS event broadcasts to trusted contacts.
+- [x] **Phase 4: Admin Panel & Governance Platform** (Completed)
+  - Zero-trust role protection, modern SaaS responsive dashboard, verification queue, user management & reputation passport, jobs oversight with milestone verification, real-time SOS dispatch with audio alert, disputes console with Gemini AI summarizer, review moderation with Gemini toxicity scanner, micro-market pricing manager, announcements, and immutable audit trail with CSV export.
+- [ ] **Phase 5: AI Multimodal Job Posting & Voice Scope**
+  - Multimodal voice-note transcription, image fault diagnosis, and auto-generated task scopes.
 - [ ] **Phase 6: Deployment & Final Polish**
   - Production deployment to Vercel and hackathon submission.

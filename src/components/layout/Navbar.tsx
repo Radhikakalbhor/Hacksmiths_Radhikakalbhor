@@ -94,6 +94,11 @@ function NavbarContent() {
     pathname === '/dashboard' ||
     (userRole === 'worker' && (pathname === '/dashboard' || pathname.startsWith('/worker')));
 
+  // Admin routes have their own dedicated sidebar and topbar layout
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
   return (
     <AnimatePresence mode="wait">
       <motion.header
