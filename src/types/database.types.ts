@@ -12,7 +12,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-export type UserRole = 'customer' | 'worker' | 'admin';
+export type UserRole = 'customer' | 'worker' | 'admin' | 'ADMIN';
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended';
 export type JobUrgency = 'standard' | 'same_day' | 'urgent' | 'emergency';
 export type JobStatus =
@@ -52,6 +52,8 @@ export interface Database {
           role: UserRole;
           verification_status: VerificationStatus;
           primary_city: string;
+          is_suspended?: boolean;
+          suspended_reason?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -64,6 +66,8 @@ export interface Database {
           role?: UserRole;
           verification_status?: VerificationStatus;
           primary_city?: string;
+          is_suspended?: boolean;
+          suspended_reason?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -75,6 +79,8 @@ export interface Database {
           role?: UserRole;
           verification_status?: VerificationStatus;
           primary_city?: string;
+          is_suspended?: boolean;
+          suspended_reason?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -558,9 +564,241 @@ export interface Database {
           },
         ];
       };
+      admin_audit_log: {
+        Row: {
+          id: string;
+          admin_id: string;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          admin_id: string;
+          action: string;
+          entity_type: string;
+          entity_id?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          action?: string;
+          entity_type?: string;
+          entity_id?: string | null;
+          metadata?: Json;
+        };
+        Relationships: [];
+      };
+      verification_documents: {
+        Row: {
+          id: string;
+          worker_id: string;
+          doc_type: string;
+          file_url: string;
+          status: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          worker_id: string;
+          doc_type: string;
+          file_url: string;
+          status?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          doc_type?: string;
+          file_url?: string;
+          status?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      disputes: {
+        Row: {
+          id: string;
+          job_id: string;
+          raised_by: string;
+          against_user: string;
+          reason: string;
+          evidence: Json;
+          status: string;
+          resolution: string | null;
+          resolved_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          job_id: string;
+          raised_by: string;
+          against_user: string;
+          reason: string;
+          evidence?: Json;
+          status?: string;
+          resolution?: string | null;
+          resolved_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: string;
+          resolution?: string | null;
+          resolved_by?: string | null;
+          evidence?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      sos_incidents: {
+        Row: {
+          id: string;
+          job_id: string | null;
+          triggered_by: string;
+          severity: string;
+          status: string;
+          location_point: unknown;
+          trusted_contacts: Json;
+          notes: string | null;
+          handled_by: string | null;
+          created_at: string;
+          resolved_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          job_id?: string | null;
+          triggered_by: string;
+          severity?: string;
+          status?: string;
+          location_point?: unknown;
+          trusted_contacts?: Json;
+          notes?: string | null;
+          handled_by?: string | null;
+          created_at?: string;
+          resolved_at?: string | null;
+        };
+        Update: {
+          job_id?: string | null;
+          triggered_by?: string;
+          severity?: string;
+          status?: string;
+          location_point?: unknown;
+          trusted_contacts?: Json;
+          notes?: string | null;
+          handled_by?: string | null;
+          created_at?: string;
+          resolved_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'sos_incidents_triggered_by_fkey';
+            columns: ['triggered_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'sos_incidents_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      review_flags: {
+        Row: {
+          id: string;
+          review_id: string;
+          reason: string;
+          status: string;
+          reviewed_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          review_id: string;
+          reason: string;
+          status?: string;
+          reviewed_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: string;
+          reviewed_by?: string | null;
+        };
+        Relationships: [];
+      };
+      announcements: {
+        Row: {
+          id: string;
+          title: string;
+          body: string;
+          audience: string;
+          city: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          body: string;
+          audience?: string;
+          city?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: {
+          title?: string;
+          body?: string;
+          audience?: string;
+          city?: string | null;
+        };
+        Relationships: [];
+      };
+      ai_job_logs: {
+        Row: {
+          id: string;
+          job_id: string | null;
+          input_type: string;
+          raw_input: string;
+          generated_scope: Json;
+          feedback: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          job_id?: string | null;
+          input_type?: string;
+          raw_input: string;
+          generated_scope: Json;
+          feedback?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          feedback?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
+      admin_dashboard_stats: {
+        Args: {
+          p_days: number;
+        };
+        Returns: Json;
+      };
       find_nearby_workers: {
         Args: {
           origin_lat: number;

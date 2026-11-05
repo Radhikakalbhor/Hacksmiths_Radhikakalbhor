@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, ArrowRight, Briefcase, CalendarClock, User, LogOut } from 'lucide-react';
+import { Menu, X, Briefcase, CalendarClock, User, LogOut, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'motion/react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { LiquidMetalButton } from '@/components/ui/liquid-metal-button';
@@ -13,7 +13,8 @@ function NavbarContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<'customer' | 'worker' | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const pathname = usePathname();
 
@@ -44,7 +45,11 @@ function NavbarContent() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
 
-    const resolveUserInfo = async (sessionUser: any) => {
+    const resolveUserInfo = async (sessionUser: {
+      id: string;
+      email?: string | null;
+      user_metadata?: { full_name?: string; name?: string };
+    } | null | undefined) => {
       if (!sessionUser) {
         setUserEmail(null);
         setDisplayName(null);
@@ -66,13 +71,15 @@ function NavbarContent() {
         .eq('id', sessionUser.id)
         .maybeSingle();
 
-      if (profile?.role === 'worker') {
-        detectedRole = 'worker';
-      } else if (profile?.role === 'customer') {
-        detectedRole = 'customer';
-      }
 
-      setUserRole(detectedRole);
+
+      
+      if (profile?.role) {
+        setUserRole(profile.role);
+      } else {
+        setUserRole(detectedRole);
+      }        
+
 
       if (!metaName) {
         if (profile?.full_name) {
@@ -112,6 +119,10 @@ function NavbarContent() {
     userRole === 'worker'
       ? pathname === '/dashboard'
       : pathname === '/post-job' || pathname === '/dashboard';
+
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
 
   return (
     <>
@@ -201,29 +212,41 @@ function NavbarContent() {
           {/* Desktop Action Buttons */}
           <div className="hidden md:flex items-center gap-3">
             {isAuthPage ? null : userEmail ? (
-              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setIsProfileModalOpen(true)}
-                  className="flex items-center gap-1.5 hover:text-[#0D4A52] transition-colors cursor-pointer text-left"
-                  title="View & Edit Profile"
-                  aria-label="Open customer profile"
-                >
-                  <User className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
-                  <span className="font-semibold max-w-[130px] truncate">
-                    {displayName || userEmail}
-                  </span>
-                </button>
-                <div className="h-3 w-px bg-[#E5DFD2] mx-0.5" />
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="text-red-600 hover:text-red-700 p-0.5 transition-colors cursor-pointer"
-                  title="Sign Out"
-                  aria-label="Sign out"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex items-center gap-2">
+                {userRole?.toUpperCase() === 'ADMIN' && (
+                  <Link
+                    href="/admin"
+                    className="flex items-center gap-1.5 bg-[#0D4A52] hover:bg-[#072F35] text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs"
+                    title="Open Admin Operations Console"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Admin Panel</span>
+                  </Link>
+                )}
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="flex items-center gap-1.5 hover:text-[#0D4A52] transition-colors cursor-pointer text-left"
+                    title="View & Edit Profile"
+                    aria-label="Open customer profile"
+                  >
+                    <User className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
+                    <span className="font-semibold max-w-[130px] truncate">
+                      {displayName || userEmail}
+                    </span>
+                  </button>
+                  <div className="h-3 w-px bg-[#E5DFD2] mx-0.5" />
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="text-red-600 hover:text-red-700 p-0.5 transition-colors cursor-pointer"
+                    title="Sign Out"
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ) : (
               <LiquidMetalButton
@@ -251,6 +274,16 @@ function NavbarContent() {
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-[#E5DFD2] bg-[#FAF9F5] px-4 pt-2 pb-6 space-y-3">
+          {userRole?.toUpperCase() === 'ADMIN' && (
+            <Link
+              href="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-semibold text-white bg-[#0D4A52] hover:bg-[#072F35]"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Admin Operations Console</span>
+            </Link>
+          )}
           <Link
             href={marketplaceHref}
             onClick={() => setMobileMenuOpen(false)}
