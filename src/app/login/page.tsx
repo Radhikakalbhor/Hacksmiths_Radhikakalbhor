@@ -25,17 +25,19 @@ import {
   validateIndianPhoneNumber,
   validateEmail,
   validateNumericOtp,
+  validateWorkerRegistration,
 } from '@/lib/validations/auth';
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialRole = searchParams.get('role') === 'worker' ? 'worker' : 'customer';
+  const initialIsRegister = searchParams.get('tab') === 'register';
   const rawRedirect = searchParams.get('redirect');
 
   const [role, setRole] = useState<'customer' | 'worker'>(initialRole);
   const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp');
-  const [isRegisteringWorker, setIsRegisteringWorker] = useState(initialRole === 'worker');
+  const [isRegisteringWorker, setIsRegisteringWorker] = useState(initialIsRegister);
 
   // Authoritative role-bounded destination router
   const computeDestination = (targetRole: 'customer' | 'worker') => {
@@ -49,7 +51,10 @@ function LoginContent() {
   const [otpSent, setOtpSent] = useState(false);
   const [otpRequestedAt, setOtpRequestedAt] = useState<number | null>(null);
   const [otpRequestedEmail, setOtpRequestedEmail] = useState<string>('');
-  const SUPABASE_OTP_LENGTH = 8;
+  const SUPABASE_OTP_LENGTH =
+    typeof process.env.NEXT_PUBLIC_SUPABASE_OTP_LENGTH === 'string'
+      ? parseInt(process.env.NEXT_PUBLIC_SUPABASE_OTP_LENGTH, 10) || 8
+      : 8;
 
   // Worker onboarding registration fields
   const [fullName, setFullName] = useState('');
@@ -103,6 +108,24 @@ function LoginContent() {
     return () => {
       authListener.subscription.unsubscribe();
     };
+  }, []);
+
+  // Restore preserved worker registration details if page was refreshed during OTP entry
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('sahayak_pending_worker_reg');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.email) setEmail(parsed.email);
+        if (parsed.fullName) setFullName(parsed.fullName);
+        if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
+        if (parsed.primaryCategory) setPrimaryCategory(parsed.primaryCategory);
+        if (parsed.yearsExperience) setYearsExperience(parsed.yearsExperience);
+        if (parsed.bio) setBio(parsed.bio);
+      }
+    } catch {
+      // Ignore sessionStorage parsing errors
+    }
   }, []);
 
   // Handle countdown timer
@@ -165,13 +188,21 @@ function LoginContent() {
       return;
     }
 
-    if (isRegisteringWorker) {
-      if (!fullName.trim() || fullName.trim().length < 2) {
-        setErrorMsg('Please enter your full name (at least 2 characters).');
-        return;
-      }
-      if (!phoneNumber.trim() || !validateIndianPhoneNumber(phoneNumber)) {
-        setErrorMsg('Please enter a valid 10-digit Indian mobile number.');
+    if (isRegisteringWorker && role === 'worker') {
+      const regValidation = validateWorkerRegistration({
+        fullName,
+        phone: phoneNumber,
+        primaryCategory,
+        yearsExperience,
+        bio,
+        email: cleanEmail,
+      });
+
+      if (!regValidation.success || !regValidation.data) {
+        setErrorMsg(
+          Object.values(regValidation.errors || {})[0] ||
+            'Please complete all required partner details.'
+        );
         return;
       }
     }
@@ -185,6 +216,36 @@ function LoginContent() {
     setLoading(true);
 
     try {
+      // 1. Authoritative Server Pre-Check for Worker Flows
+      if (role === 'worker') {
+        const preCheckRes = await fetch('/api/auth/worker/pre-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            intent: isRegisteringWorker ? 'register' : 'signin',
+          }),
+        });
+
+        const preCheckData = await preCheckRes.json();
+
+        if (!preCheckRes.ok || preCheckData.data?.allowed === false) {
+          setErrorMsg(
+            preCheckData.data?.error ||
+              preCheckData.error?.message ||
+              (isRegisteringWorker
+                ? 'This email is already registered as a worker partner. Please use "Existing Worker Sign In" to log in.'
+                : 'This email is not registered as a worker. Please register as a new partner first.')
+          );
+          setLoading(false);
+          return;
+        }
+
+        if (isRegisteringWorker && preCheckData.data?.isExistingCustomer) {
+          setSuccessMsg(preCheckData.data.message);
+        }
+      }
+
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
       const targetRedirect = computeDestination(role);
       const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
@@ -192,7 +253,7 @@ function LoginContent() {
       const { error } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: {
-          shouldCreateUser: true,
+          shouldCreateUser: role === 'worker' ? isRegisteringWorker : true,
           emailRedirectTo: callbackUrl,
           data: role === 'worker'
             ? {
@@ -228,6 +289,23 @@ function LoginContent() {
           setErrorMsg(error.message);
         }
       } else {
+        if (role === 'worker' && isRegisteringWorker) {
+          try {
+            sessionStorage.setItem(
+              'sahayak_pending_worker_reg',
+              JSON.stringify({
+                fullName: fullName.trim(),
+                phoneNumber: phoneNumber.trim(),
+                primaryCategory,
+                yearsExperience,
+                bio: bio.trim(),
+                email: cleanEmail,
+              })
+            );
+          } catch {
+            // Ignore sessionStorage quota error
+          }
+        }
         setOtpSent(true);
         setOtpCode('');
         setCooldown(60);
@@ -264,7 +342,11 @@ function LoginContent() {
     }
 
     const cleanCode = otpCode.trim();
-    if (!validateNumericOtp(cleanCode, SUPABASE_OTP_LENGTH)) {
+    const isValidOtp =
+      validateNumericOtp(cleanCode, SUPABASE_OTP_LENGTH) ||
+      (SUPABASE_OTP_LENGTH !== 6 && validateNumericOtp(cleanCode, 6));
+
+    if (!isValidOtp) {
       setErrorMsg(`Please enter the full ${SUPABASE_OTP_LENGTH}-digit numeric verification code.`);
       return;
     }
@@ -275,11 +357,39 @@ function LoginContent() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
+      // 1. Authoritative OTP Verification with correct GoTrue type
+      // New Partner Registration generates a 'signup' OTP in GoTrue.
+      // Existing Worker Sign In generates an 'email' (magic link) OTP in GoTrue.
+      const isNewPartner = role === 'worker' && isRegisteringWorker;
+      const primaryType: 'signup' | 'email' = isNewPartner ? 'signup' : 'email';
+      const fallbackType: 'signup' | 'email' = isNewPartner ? 'email' : 'signup';
+
+      let verifyResult = await supabase.auth.verifyOtp({
         email: cleanEmail,
         token: cleanCode,
-        type: 'email',
+        type: primaryType,
       });
+
+      // If the primary type fails (e.g. existing customer upgrading where GoTrue generated 'email' OTP),
+      // attempt fallback verification type before returning an error
+      if (
+        verifyResult.error &&
+        (verifyResult.error.message?.toLowerCase().includes('token') ||
+          verifyResult.error.message?.toLowerCase().includes('invalid') ||
+          (verifyResult.error as { code?: string }).code === 'otp_expired')
+      ) {
+        const fallbackResult = await supabase.auth.verifyOtp({
+          email: cleanEmail,
+          token: cleanCode,
+          type: fallbackType,
+        });
+
+        if (!fallbackResult.error && fallbackResult.data?.session) {
+          verifyResult = fallbackResult;
+        }
+      }
+
+      const { data, error } = verifyResult;
 
       if (error) {
         const errorText = error.message.toLowerCase();
@@ -292,11 +402,13 @@ function LoginContent() {
           setErrorMsg('Too many verification attempts. Please wait a few minutes before retrying.');
         } else if (errorText.includes('network') || errorText.includes('failed to fetch') || errorText.includes('fetch failed')) {
           setErrorMsg('Network error connecting to authentication service. Please check your internet connection.');
-        } else if (errorCode === 'otp_expired' || errorText.includes('expired') || errorText.includes('invalid')) {
+        } else if (errorCode === 'otp_expired' || errorText.includes('expired')) {
+          setErrorMsg('The verification code has expired. Please click "Resend Code" to receive a fresh code.');
+        } else if (errorText.includes('invalid') || errorCode === 'validation_failed') {
           if (isTimeExpired) {
             setErrorMsg('The verification code has expired. Please click "Resend Code" to receive a fresh code.');
           } else {
-            setErrorMsg('Invalid verification code. Please check your email and make sure you entered all 8 digits correctly.');
+            setErrorMsg(`Invalid verification code. Please check your email and make sure you entered all ${SUPABASE_OTP_LENGTH} digits correctly.`);
           }
         } else {
           setErrorMsg(error.message);
@@ -311,28 +423,73 @@ function LoginContent() {
 
       const user = data.user;
 
-      // Zero-trust role determination: Query existing profile first
+      // 1. New Partner Registration: provision authoritative profile & worker_profiles
+      if (role === 'worker' && isRegisteringWorker) {
+        const compRes = await fetch('/api/auth/worker/complete-registration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: fullName.trim(),
+            phone: phoneNumber.trim(),
+            primaryCategory,
+            yearsExperience: parseInt(yearsExperience, 10) || 0,
+            bio: bio.trim(),
+            email: cleanEmail,
+          }),
+        });
+
+        const compData = await compRes.json();
+        if (!compRes.ok || !compData.success) {
+          setErrorMsg(compData.error?.message || 'Failed to complete partner profile setup. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        try {
+          sessionStorage.removeItem('sahayak_pending_worker_reg');
+        } catch {}
+
+        setSuccessMsg('Partner registration verified and completed! Redirecting to Partner Dashboard...');
+        setTimeout(() => {
+          router.push('/worker/dashboard');
+          router.refresh();
+        }, 800);
+        return;
+      }
+
+      // 2. Existing Worker Sign In: verify authoritative worker role
+      if (role === 'worker' && !isRegisteringWorker) {
+        const meRes = await fetch('/api/auth/me');
+        const meData = await meRes.json();
+
+        if (meData.data?.role !== 'worker') {
+          setErrorMsg('This email is not registered as a worker. Please register as a new partner first.');
+          await supabase.auth.signOut();
+          setLoading(false);
+          return;
+        }
+
+        setSuccessMsg('Worker authenticated successfully! Redirecting to Worker Dashboard...');
+        setTimeout(() => {
+          router.push('/worker/dashboard');
+          router.refresh();
+        }, 800);
+        return;
+      }
+
+      // 3. Customer Sign In / Registration
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id, role')
         .eq('id', user.id)
         .maybeSingle();
 
-      const finalRole: 'customer' | 'worker' =
-        existingProfile?.role === 'worker' || existingProfile?.role === 'customer'
-          ? existingProfile.role
-          : role === 'worker'
-          ? 'worker'
-          : 'customer';
-
       if (!existingProfile) {
         const fullNameVal =
-          fullName.trim() ||
           user.user_metadata?.full_name ||
           user.email?.split('@')[0] ||
-          (finalRole === 'worker' ? 'Sahayak Partner' : 'Sahayak Customer');
+          'Sahayak Customer';
         const phoneVal =
-          phoneNumber.trim() ||
           user.phone ||
           user.user_metadata?.phone ||
           `email_${user.id.replace(/-/g, '').slice(0, 10)}`;
@@ -343,27 +500,14 @@ function LoginContent() {
           phone: phoneVal,
           full_name: fullNameVal,
           avatar_url: user.user_metadata?.avatar_url || null,
-          role: finalRole,
+          role: 'customer',
           verification_status: 'unverified',
           primary_city: 'Delhi NCR',
         });
-
-        if (finalRole === 'worker') {
-          await supabase.from('worker_profiles').insert({
-            user_id: user.id,
-            primary_category: primaryCategory || 'plumbing',
-            skills: ['general'],
-            bio: bio.trim() || 'Partner registered via Email OTP',
-            years_experience: parseInt(yearsExperience, 10) || 1,
-            is_available: true,
-            is_publicly_visible: false,
-          });
-        }
       }
 
       setSuccessMsg('Authentication verified successfully! Establishing session and redirecting...');
-
-      const targetDestination = computeDestination(finalRole);
+      const targetDestination = computeDestination('customer');
 
       setTimeout(() => {
         router.push(targetDestination);
@@ -629,7 +773,7 @@ function LoginContent() {
               Or continue with email
             </h2>
             <p className="text-[11px] text-[#576563]">
-              We&apos;ll send a 6-digit OTP code directly to your email
+              We&apos;ll send an {SUPABASE_OTP_LENGTH}-digit OTP code directly to your email
             </p>
           </div>
           <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EBF4F3] text-[#0D4A52] border border-[#BCE5DA]">
@@ -713,10 +857,11 @@ function LoginContent() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-[#152220] mb-1">
-                      Experience (Years)
+                      Experience (Years) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
+                      required
                       min={0}
                       max={50}
                       value={yearsExperience}
@@ -728,10 +873,11 @@ function LoginContent() {
 
                 <div>
                   <label className="block text-xs font-semibold text-[#152220] mb-1">
-                    Brief Bio / Skills Summary
+                    Brief Bio / Skills Summary <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     rows={2}
+                    required
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     placeholder="e.g., Licensed electrician specializing in domestic wiring and MCB upgrades..."
@@ -791,11 +937,14 @@ function LoginContent() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-[#152220]">
-                  Enter 8-Digit OTP Code
+                  Enter {SUPABASE_OTP_LENGTH}-Digit OTP Code
                 </label>
                 <button
                   type="button"
                   onClick={() => {
+                    try {
+                      sessionStorage.removeItem('sahayak_pending_worker_reg');
+                    } catch {}
                     setOtpSent(false);
                     setOtpCode('');
                     setOtpRequestedAt(null);
@@ -809,7 +958,7 @@ function LoginContent() {
                 </button>
               </div>
               <p className="text-[11px] text-[#576563]">
-                Enter the 8-digit numeric verification code requested for{' '}
+                Enter the {SUPABASE_OTP_LENGTH}-digit numeric verification code requested for{' '}
                 <span className="font-semibold text-[#152220]">{email}</span>.
               </p>
               <input
@@ -818,10 +967,12 @@ function LoginContent() {
                 autoComplete="one-time-code"
                 pattern="[0-9]*"
                 required
-                maxLength={8}
+                maxLength={SUPABASE_OTP_LENGTH}
                 value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                placeholder="••••••••"
+                onChange={(e) =>
+                  setOtpCode(e.target.value.replace(/\D/g, '').slice(0, SUPABASE_OTP_LENGTH))
+                }
+                placeholder={SUPABASE_OTP_LENGTH === 8 ? '••••••••' : '••••••'}
                 className="w-full p-3 text-center text-xl tracking-[0.4em] font-mono rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none font-bold placeholder:tracking-normal placeholder:text-gray-300"
               />
             </div>

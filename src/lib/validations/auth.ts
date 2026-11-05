@@ -70,3 +70,65 @@ export function validateCustomerSignup(input: {
 
   return { success: true, data: input };
 }
+
+export function validateWorkerRegistration(input: {
+  fullName: string;
+  phone: string;
+  primaryCategory: string;
+  yearsExperience: number | string;
+  bio?: string;
+  email: string;
+}): ValidationResult<{
+  fullName: string;
+  phone: string;
+  primaryCategory: string;
+  yearsExperience: number;
+  bio: string;
+  email: string;
+}> {
+  const errors: Record<string, string> = {};
+
+  if (!input.fullName || input.fullName.trim().length < 2) {
+    errors.fullName = 'Full name must be at least 2 characters.';
+  }
+
+  if (!input.phone || !validateIndianPhoneNumber(input.phone)) {
+    errors.phone = 'Please provide a valid 10-digit Indian mobile number.';
+  }
+
+  if (!input.primaryCategory || input.primaryCategory.trim().length === 0) {
+    errors.primaryCategory = 'Please select a primary trade category.';
+  }
+
+  const expNum =
+    typeof input.yearsExperience === 'number'
+      ? input.yearsExperience
+      : parseInt(String(input.yearsExperience || '0'), 10);
+  if (isNaN(expNum) || expNum < 0 || expNum > 60) {
+    errors.yearsExperience = 'Years of experience must be between 0 and 60.';
+  }
+
+  if (!input.bio || input.bio.trim().length < 5) {
+    errors.bio = 'Please provide a brief bio or skills summary (at least 5 characters).';
+  }
+
+  if (!input.email || !validateEmail(input.email)) {
+    errors.email = 'Please provide a valid email address.';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { success: false, errors };
+  }
+
+  return {
+    success: true,
+    data: {
+      fullName: input.fullName.trim(),
+      phone: input.phone.trim(),
+      primaryCategory: input.primaryCategory.trim().toLowerCase(),
+      yearsExperience: expNum,
+      bio: input.bio ? input.bio.trim() : '',
+      email: input.email.trim().toLowerCase(),
+    },
+  };
+}

@@ -177,13 +177,19 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (!existingWp) {
+      const meta = user.user_metadata || {};
+      const primaryCategory = (meta.primary_category as string) || 'plumbing';
+      const bio = (meta.bio as string) || 'Partner profile registered via Sahayak Auth';
+      const yearsExp = typeof meta.years_experience === 'number' ? meta.years_experience : (parseInt(String(meta.years_experience || '1'), 10) || 1);
+      const skills = Array.isArray(meta.skills) && meta.skills.length > 0 ? meta.skills : [primaryCategory];
+
       console.log(`[OAuth Callback] Initializing worker_profiles record for worker ${userMasked}`);
       await client.from('worker_profiles').insert({
         user_id: user.id,
-        primary_category: 'plumbing',
-        skills: ['general'],
-        bio: 'Partner profile registered via Sahayak Auth',
-        years_experience: 1,
+        primary_category: primaryCategory,
+        skills: skills,
+        bio: bio,
+        years_experience: yearsExp,
         is_available: true,
         is_publicly_visible: false,
       });
