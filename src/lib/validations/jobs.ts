@@ -113,6 +113,10 @@ export interface CreateBidInput {
   materialsEstimateInr?: number;
   visitationFeeInr?: number;
   note?: string;
+  permittedPriceRange?: {
+    minPriceInr: number;
+    maxPriceInr: number;
+  };
 }
 
 export function validateCreateBid(input: CreateBidInput): ValidationResult<CreateBidInput> {
@@ -128,6 +132,13 @@ export function validateCreateBid(input: CreateBidInput): ValidationResult<Creat
 
   if (typeof input.offeredAmountInr !== 'number' || input.offeredAmountInr <= 0) {
     errors.offeredAmountInr = 'Total offered amount must be greater than zero.';
+  } else if (input.permittedPriceRange) {
+    const { minPriceInr, maxPriceInr } = input.permittedPriceRange;
+    if (input.offeredAmountInr < minPriceInr) {
+      errors.offeredAmountInr = `Bid amount ₹${input.offeredAmountInr} is below the fair price minimum of ₹${minPriceInr} for this job. Permitted range: ₹${minPriceInr} - ₹${maxPriceInr}.`;
+    } else if (input.offeredAmountInr > maxPriceInr) {
+      errors.offeredAmountInr = `Bid amount ₹${input.offeredAmountInr} exceeds the fair price ceiling of ₹${maxPriceInr} for this job. Permitted range: ₹${minPriceInr} - ₹${maxPriceInr}.`;
+    }
   }
 
   if (typeof input.laborCostInr !== 'number' || input.laborCostInr < 0) {
@@ -158,6 +169,10 @@ export interface CounterOfferInput {
   proposedByRole: 'customer' | 'worker';
   proposedAmountInr: number;
   message?: string;
+  permittedPriceRange?: {
+    minPriceInr: number;
+    maxPriceInr: number;
+  };
 }
 
 export function validateCounterOffer(
@@ -175,6 +190,13 @@ export function validateCounterOffer(
 
   if (typeof input.proposedAmountInr !== 'number' || input.proposedAmountInr <= 0) {
     errors.proposedAmountInr = 'Counter-offer amount must be greater than zero.';
+  } else if (input.permittedPriceRange) {
+    const { minPriceInr, maxPriceInr } = input.permittedPriceRange;
+    if (input.proposedAmountInr < minPriceInr) {
+      errors.proposedAmountInr = `Counter-offer amount ₹${input.proposedAmountInr} is below the fair price minimum of ₹${minPriceInr} for this job. Permitted range: ₹${minPriceInr} - ₹${maxPriceInr}.`;
+    } else if (input.proposedAmountInr > maxPriceInr) {
+      errors.proposedAmountInr = `Counter-offer amount ₹${input.proposedAmountInr} exceeds the fair price ceiling of ₹${maxPriceInr} for this job. Permitted range: ₹${minPriceInr} - ₹${maxPriceInr}.`;
+    }
   }
 
   if (input.message && input.message.length > 300) {

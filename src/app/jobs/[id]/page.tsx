@@ -393,11 +393,19 @@ function JobDiscoveryContent() {
   const handleOpenBookingConfirm = (worker: NearbyWorker) => {
     setActiveWorkerProfile(null);
     setBookingConfirmWorker(worker);
-    const estimatedAmount =
+
+    const minPrice = job?.estimated_min_price_inr || 300;
+    const maxPrice = job?.estimated_max_price_inr || Math.max(minPrice + 100, Math.round(minPrice * 1.5));
+
+    let estimatedAmount =
       worker.fixed_rate_estimate_inr ||
       worker.hourly_rate_inr ||
       job?.estimated_min_price_inr ||
-      450;
+      minPrice;
+
+    if (estimatedAmount < minPrice) estimatedAmount = minPrice;
+    if (estimatedAmount > maxPrice) estimatedAmount = maxPrice;
+
     setBookingAgreedPrice(estimatedAmount);
     setBookingError(null);
   };
@@ -405,6 +413,15 @@ function JobDiscoveryContent() {
   // Submit Instant Booking
   const handleConfirmBooking = async () => {
     if (!job || !bookingConfirmWorker) return;
+
+    const minPrice = job.estimated_min_price_inr || 300;
+    const maxPrice = job.estimated_max_price_inr || Math.max(minPrice + 100, Math.round(minPrice * 1.5));
+
+    if (bookingAgreedPrice < minPrice || bookingAgreedPrice > maxPrice) {
+      setBookingError(`Booking amount must be between ₹${minPrice} and ₹${maxPrice} (Sahayak Fair Pricing Policy).`);
+      return;
+    }
+
     setIsBookingSubmitting(true);
     setBookingError(null);
 
@@ -1624,19 +1641,36 @@ function JobDiscoveryContent() {
               </div>
 
               <div className="flex justify-between items-center py-2.5 bg-emerald-50/60 px-3 rounded-xl border border-emerald-100">
-                <span className="font-bold text-[#0D4A52]">Agreed Service Amount:</span>
+                <div>
+                  <span className="font-bold text-[#0D4A52] block">Agreed Service Amount:</span>
+                  <span className="text-[10px] text-[#576563]">
+                    Fair Price Range: ₹{job.estimated_min_price_inr || 300} – ₹{job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))}
+                  </span>
+                </div>
                 <div className="flex items-center gap-1 font-black text-lg text-[#0D4A52]">
                   <span>₹</span>
                   <input
                     type="number"
-                    min="100"
+                    min={job.estimated_min_price_inr || 300}
+                    max={job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))}
                     step="50"
                     value={bookingAgreedPrice}
-                    onChange={(e) => setBookingAgreedPrice(Math.max(100, parseInt(e.target.value, 10) || 100))}
+                    onChange={(e) => {
+                      setBookingAgreedPrice(parseInt(e.target.value, 10) || 0);
+                      if (bookingError) setBookingError(null);
+                    }}
                     className="w-24 text-right bg-white px-2 py-1 rounded border border-[#BCE5DA] font-mono text-base outline-none focus:ring-2 focus:ring-[#0D4A52]"
                   />
                 </div>
               </div>
+
+              {(bookingAgreedPrice < (job.estimated_min_price_inr || 300) ||
+                bookingAgreedPrice > (job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5)))) && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-1.5 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Amount must be between ₹{job.estimated_min_price_inr || 300} and ₹{job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))} to comply with Fair Pricing.</span>
+                </div>
+              )}
             </div>
 
             {/* End-to-End Encryption Notice */}
@@ -1671,7 +1705,11 @@ function JobDiscoveryContent() {
               <Button
                 variant="primary"
                 size="md"
-                disabled={isBookingSubmitting}
+                disabled={
+                  isBookingSubmitting ||
+                  bookingAgreedPrice < (job.estimated_min_price_inr || 300) ||
+                  bookingAgreedPrice > (job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5)))
+                }
                 className="w-2/3 text-xs font-bold gap-2 bg-[#0D4A52] hover:bg-[#072F35]"
                 onClick={handleConfirmBooking}
               >

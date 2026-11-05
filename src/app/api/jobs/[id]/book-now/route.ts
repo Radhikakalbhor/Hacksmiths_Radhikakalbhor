@@ -9,6 +9,7 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { requireRole } from '@/lib/auth/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { BookingService } from '@/lib/services/booking.service';
+import { PricingService } from '@/lib/services/pricing.service';
 import { calculateEstimatedTravelTimeMinutes, BookingState } from '@/types/booking';
 
 export async function POST(
@@ -132,13 +133,31 @@ export async function POST(
       isDemoWorker = true;
     }
 
-    // 3. Determine agreed price (from payload, job estimate, or worker rates)
-    const agreedPrice =
-      payload.offeredPriceInr ||
-      job.estimated_min_price_inr ||
-      workerProfile?.fixed_rate_estimate_inr ||
-      workerProfile?.hourly_rate_inr ||
-      450;
+    // 3. Determine agreed price within the authoritative fair price range
+    const fairRange = PricingService.getJobFairPriceRange(job);
+
+    let requestedPrice = payload.offeredPriceInr;
+    if (requestedPrice != null) {
+      const validation = PricingService.validateBidAgainstFairRange(requestedPrice, fairRange);
+      if (!validation.isValid) {
+        return apiError(
+          `Booking amount ₹${requestedPrice} is outside the permitted fair price range of ₹${fairRange.minPriceInr} - ₹${fairRange.maxPriceInr} for this job.`,
+          400,
+          'BOOKING_PRICE_OUTSIDE_FAIR_RANGE',
+          {
+            requestedPriceInr: requestedPrice,
+            permittedMinPriceInr: fairRange.minPriceInr,
+            permittedMaxPriceInr: fairRange.maxPriceInr,
+          }
+        );
+      }
+    }
+
+    const agreedPrice = requestedPrice != null
+      ? Math.round(requestedPrice)
+      : (job.estimated_min_price_inr && job.estimated_min_price_inr >= fairRange.minPriceInr && job.estimated_min_price_inr <= fairRange.maxPriceInr)
+      ? Math.round(job.estimated_min_price_inr)
+      : Math.round((fairRange.minPriceInr + fairRange.maxPriceInr) / 20) * 10;
 
     // 4. Calculate Travel Time and ETA
     const distanceMeters = payload.distanceMeters || 2500;

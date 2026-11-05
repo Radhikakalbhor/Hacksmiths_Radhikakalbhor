@@ -7,6 +7,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Database, JobStatus, JobUrgency, Json } from '@/types/database.types';
 import { canTransitionJob } from '@/types/jobs';
 import { CreateJobInput, CreateBidInput } from '@/lib/validations/jobs';
+import { PricingService } from '@/lib/services/pricing.service';
 
 export type JobRow = Database['public']['Tables']['jobs']['Row'];
 export type JobInsert = Database['public']['Tables']['jobs']['Insert'];
@@ -110,6 +111,26 @@ export class JobsService {
       status: 'PENDING',
       counter_offers: [],
     };
+  }
+
+  /**
+   * Enforces fair pricing for bids against the target job's fair price range.
+   */
+  static validateBidFairPrice(
+    offeredAmountInr: number,
+    job: {
+      category?: string | null;
+      title?: string | null;
+      description?: string | null;
+      urgency?: string | null;
+      estimated_min_price_inr?: number | null;
+      estimated_max_price_inr?: number | null;
+      estimated_budget_inr?: number | null;
+      city?: string | null;
+    }
+  ) {
+    const range = PricingService.getJobFairPriceRange(job);
+    return PricingService.validateBidAgainstFairRange(offeredAmountInr, range);
   }
 
   /**

@@ -20,6 +20,7 @@ import {
   Wallet,
   SlidersHorizontal,
   Compass,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   WorkerWallet,
@@ -405,7 +406,7 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
   };
 
   // Worker Submits Open Bid
-  const handleSubmitBid = async (jobId: string) => {
+  const handleSubmitBid = async (jobId: string, minPrice?: number, maxPrice?: number) => {
     const offeredAmount = parseFloat(bidInput.offeredAmountInr);
     const laborCost = parseFloat(bidInput.laborCostInr || '0');
     const materialsEstimate = parseFloat(bidInput.materialsEstimateInr || '0');
@@ -413,6 +414,16 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
 
     if (isNaN(offeredAmount) || offeredAmount <= 0) {
       setActionError('Total offered amount must be greater than 0.');
+      return;
+    }
+
+    if (minPrice != null && offeredAmount < minPrice) {
+      setActionError(`Bid amount ₹${offeredAmount} is below the minimum fair estimate of ₹${minPrice} for this job.`);
+      return;
+    }
+
+    if (maxPrice != null && offeredAmount > maxPrice) {
+      setActionError(`Bid amount ₹${offeredAmount} exceeds the maximum fair ceiling of ₹${maxPrice} for this job.`);
       return;
     }
 
@@ -657,6 +668,13 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {openJobs.map((job) => {
                   const isBiddingOnThis = bidFormOpen === job.id;
+                  const jobMinPrice = job.estimated_min_price_inr || 300;
+                  const jobMaxPrice = job.estimated_max_price_inr || Math.max(jobMinPrice + 100, Math.round(jobMinPrice * 1.5));
+                  const enteredAmount = parseFloat(bidInput.offeredAmountInr);
+                  const isAmountEntered = !isNaN(enteredAmount) && bidInput.offeredAmountInr.trim() !== '';
+                  const isAmountBelowMin = isAmountEntered && enteredAmount < jobMinPrice;
+                  const isAmountAboveMax = isAmountEntered && enteredAmount > jobMaxPrice;
+                  const isBidValid = isAmountEntered && !isAmountBelowMin && !isAmountAboveMax;
 
                   return (
                     <Card key={job.id} className="p-5 space-y-4 flex flex-col justify-between">
@@ -729,20 +747,33 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
                       {/* Itemized Bid Submission Form */}
                       {isBiddingOnThis && (
                         <div className="pt-4 border-t border-emerald-100 bg-emerald-50/40 -mx-5 -mb-5 p-5 rounded-b-xl space-y-3">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D4A52]">
-                            Submit Your Proposal
-                          </h4>
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D4A52]">
+                              Submit Your Proposal
+                            </h4>
+                            <div className="flex items-center gap-1 text-[11px] font-bold text-teal-900 bg-teal-100/80 px-2.5 py-0.5 rounded-full border border-teal-200">
+                              <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
+                              <span>Fair Range: ₹{jobMinPrice} – ₹{jobMaxPrice}</span>
+                            </div>
+                          </div>
+
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                             <div className="space-y-1">
-                              <label className="text-gray-600 block">Total Price (₹)*</label>
+                              <label className="text-gray-600 block font-semibold">Total Price (₹)*</label>
                               <input
                                 type="number"
-                                placeholder="Total"
+                                placeholder={`₹${jobMinPrice}–₹${jobMaxPrice}`}
                                 value={bidInput.offeredAmountInr}
                                 onChange={(e) =>
                                   setBidInput((prev) => ({ ...prev, offeredAmountInr: e.target.value }))
                                 }
-                                className="w-full p-2 rounded border border-gray-300 bg-white"
+                                className={`w-full p-2 rounded border bg-white ${
+                                  isAmountBelowMin || isAmountAboveMax
+                                    ? 'border-rose-400 focus:ring-rose-400'
+                                    : isBidValid
+                                    ? 'border-emerald-400 focus:ring-emerald-400'
+                                    : 'border-gray-300'
+                                }`}
                                 required
                               />
                             </div>
@@ -784,6 +815,28 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
                             </div>
                           </div>
 
+                          {/* Dynamic Fair Price Range Feedback */}
+                          {isAmountBelowMin && (
+                            <div className="p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900 flex items-center gap-1.5 animate-in fade-in">
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <span>Amount cannot be below the fair minimum of ₹{jobMinPrice} for this request.</span>
+                            </div>
+                          )}
+
+                          {isAmountAboveMax && (
+                            <div className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-900 flex items-center gap-1.5 animate-in fade-in">
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              <span>Amount exceeds the fair price ceiling of ₹{jobMaxPrice}. Please adjust your bid to comply with Sahayak Fair Pricing.</span>
+                            </div>
+                          )}
+
+                          {isBidValid && (
+                            <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-[11px] text-emerald-900 flex items-center gap-1.5 animate-in fade-in">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Bid of ₹{enteredAmount} complies with the Fair Pricing Policy (₹{jobMinPrice} – ₹{jobMaxPrice}).</span>
+                            </div>
+                          )}
+
                           <div className="space-y-1 text-xs">
                             <label className="text-gray-600 block">Note for Homeowner</label>
                             <input
@@ -802,8 +855,8 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
                             <Button
                               size="sm"
                               variant="primary"
-                              disabled={submittingBid || !bidInput.offeredAmountInr}
-                              onClick={() => handleSubmitBid(job.id)}
+                              disabled={submittingBid || !isBidValid}
+                              onClick={() => handleSubmitBid(job.id, jobMinPrice, jobMaxPrice)}
                             >
                               {submittingBid ? 'Submitting...' : 'Send Proposal'}
                             </Button>

@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireRole } from '@/lib/auth/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { PricingService } from '@/lib/services/pricing.service';
 
 export async function POST(
   request: NextRequest,
@@ -42,6 +43,41 @@ export async function POST(
     }
 
     const bidId = payload.bidId.trim();
+
+    // Verify bid exists and complies with Fair Pricing bounds before acceptance
+    const { data: targetJob } = await supabase!
+      .from('jobs')
+      .select('id, category, title, description, urgency, city, estimated_min_price_inr, estimated_max_price_inr, estimated_budget_inr')
+      .eq('id', jobId)
+      .maybeSingle();
+
+    const { data: targetBid } = await supabase!
+      .from('bids')
+      .select('id, offered_amount_inr, status')
+      .eq('id', bidId)
+      .eq('job_id', jobId)
+      .maybeSingle();
+
+    if (targetJob && targetBid) {
+      const fairRange = PricingService.getJobFairPriceRange(targetJob);
+      const priceValidation = PricingService.validateBidAgainstFairRange(
+        targetBid.offered_amount_inr,
+        fairRange
+      );
+
+      if (!priceValidation.isValid) {
+        return apiError(
+          `Cannot accept bid: ${priceValidation.error}`,
+          400,
+          'BID_OUTSIDE_FAIR_RANGE',
+          {
+            offeredAmountInr: targetBid.offered_amount_inr,
+            permittedMinPriceInr: fairRange.minPriceInr,
+            permittedMaxPriceInr: fairRange.maxPriceInr,
+          }
+        );
+      }
+    }
 
     // Call the database function accept_job_bid for transaction-safe, atomic execution with row-level locks
     const { data: result, error: rpcError } = await supabase!.rpc('accept_job_bid', {

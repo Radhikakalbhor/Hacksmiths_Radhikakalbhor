@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/auth/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { PricingService } from '@/lib/services/pricing.service';
 
 export async function POST(
   request: NextRequest,
@@ -57,10 +58,10 @@ export async function POST(
       );
     }
 
-    // Retrieve target job
+    // Retrieve target job with pricing fields
     const { data: job, error: jobError } = await supabase!
       .from('jobs')
-      .select('id, customer_id, status')
+      .select('id, customer_id, status, category, title, description, urgency, city, estimated_min_price_inr, estimated_max_price_inr, estimated_budget_inr')
       .eq('id', jobId)
       .maybeSingle();
 
@@ -73,6 +74,26 @@ export async function POST(
         `Cannot negotiate on a job that is not open for bidding. Current status: '${job.status}'.`,
         409,
         'JOB_NOT_OPEN'
+      );
+    }
+
+    // Enforce Fair Pricing Limits: Every counter-offer must fall within the job's estimated fair price range
+    const fairRange = PricingService.getJobFairPriceRange(job);
+    const counterValidation = PricingService.validateBidAgainstFairRange(
+      payload.proposedAmountInr,
+      fairRange
+    );
+
+    if (!counterValidation.isValid) {
+      return apiError(
+        counterValidation.error || 'Counter-offer amount is outside the permitted fair price range for this job.',
+        400,
+        'COUNTER_OUTSIDE_FAIR_RANGE',
+        {
+          proposedAmountInr: payload.proposedAmountInr,
+          permittedMinPriceInr: fairRange.minPriceInr,
+          permittedMaxPriceInr: fairRange.maxPriceInr,
+        }
       );
     }
 

@@ -68,20 +68,43 @@ export async function POST(
       );
     }
 
+    // Enforce Fair Pricing Limits: Every worker's initial bid must fall within the job's estimated fair price range
+    const fairRange = PricingService.getJobFairPriceRange(job);
+
     // Validate the bid input with worker ID guaranteed from session
     const bidPayloadInput = {
       ...(typeof body === 'object' && body !== null ? body : {}),
       jobId,
       workerId: user.id,
+      permittedPriceRange: fairRange,
     };
 
-    const validation = validateCreateBid(bidPayloadInput as Parameters<typeof validateCreateBid>[0]);
+    const validation = validateCreateBid(bidPayloadInput as unknown as Parameters<typeof validateCreateBid>[0]);
 
     if (!validation.success || !validation.data) {
       return apiError('Validation failed for bid submission.', 400, 'VALIDATION_ERROR', validation.errors);
     }
 
     const validatedBid = validation.data;
+
+    // Double-check price against authoritative job fair range
+    const priceValidation = PricingService.validateBidAgainstFairRange(
+      validatedBid.offeredAmountInr,
+      fairRange
+    );
+
+    if (!priceValidation.isValid) {
+      return apiError(
+        priceValidation.error || 'Bid amount is outside the permitted fair price range for this job.',
+        400,
+        'BID_OUTSIDE_FAIR_RANGE',
+        {
+          offeredAmountInr: validatedBid.offeredAmountInr,
+          permittedMinPriceInr: fairRange.minPriceInr,
+          permittedMaxPriceInr: fairRange.maxPriceInr,
+        }
+      );
+    }
 
     // 3. Prevent duplicate active bids
     const { data: existingBid } = await supabase!

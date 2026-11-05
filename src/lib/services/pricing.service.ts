@@ -512,4 +512,110 @@ export class PricingService {
 
     return { legacyAggregatorPriceInr, savingsInr, savingsPercentage };
   }
+
+  /**
+   * Resolves the authoritative fair price range for a specific job.
+   * Priority:
+   * 1. Stored job estimate on the job record (estimated_min_price_inr and estimated_max_price_inr).
+   * 2. Calculated dynamically via calculateFairPriceRange if fields are null or incomplete.
+   * Never relies on hardcoded global price ranges. Preserves category, complexity, urgency, and materials.
+   */
+  static getJobFairPriceRange(job: {
+    category?: string | null;
+    title?: string | null;
+    description?: string | null;
+    urgency?: string | null;
+    estimated_min_price_inr?: number | null;
+    estimated_max_price_inr?: number | null;
+    estimated_budget_inr?: number | null;
+    city?: string | null;
+  }): { minPriceInr: number; maxPriceInr: number; source: 'stored_job_estimate' | 'calculated_engine' } {
+    const minVal = job?.estimated_min_price_inr;
+    const maxVal = job?.estimated_max_price_inr;
+
+    const hasStoredMin = typeof minVal === 'number' && !isNaN(minVal) && minVal > 0;
+    const hasStoredMax = typeof maxVal === 'number' && !isNaN(maxVal) && maxVal > 0;
+
+    if (hasStoredMin && hasStoredMax) {
+      const min = Math.round(minVal);
+      const max = Math.max(min, Math.round(maxVal));
+      return { minPriceInr: min, maxPriceInr: max, source: 'stored_job_estimate' };
+    }
+
+    // Dynamic calculation fallback if stored estimate is incomplete or null
+    let urgency: JobUrgency = 'standard';
+    const rawUrgency = (job?.urgency || '').toLowerCase().trim();
+    if (rawUrgency === 'same_day' || rawUrgency === 'urgent') {
+      urgency = 'urgent';
+    } else if (rawUrgency === 'emergency') {
+      urgency = 'emergency';
+    }
+
+    const calculated = this.calculateFairPriceRange({
+      category: job?.category || 'plumbing',
+      title: job?.title || 'General Service',
+      description: job?.description || undefined,
+      urgency,
+      userBudget: job?.estimated_budget_inr || undefined,
+      city: job?.city || undefined,
+    });
+
+    const min = hasStoredMin ? Math.round(minVal) : calculated.recommendedMinInr;
+    const max = hasStoredMax ? Math.round(maxVal) : Math.max(min, calculated.recommendedMaxInr);
+
+    return { minPriceInr: min, maxPriceInr: max, source: 'calculated_engine' };
+  }
+
+  /**
+   * Enforces fair pricing bounds for worker bids, counter-offers, and bookings.
+   * Returns validation result with clear error messaging.
+   */
+  static validateBidAgainstFairRange(
+    offeredAmountInr: number,
+    range: { minPriceInr: number; maxPriceInr: number }
+  ): {
+    isValid: boolean;
+    error?: string;
+    code?: 'BID_BELOW_MINIMUM' | 'BID_ABOVE_MAXIMUM' | 'INVALID_AMOUNT';
+    minPriceInr: number;
+    maxPriceInr: number;
+  } {
+    if (typeof offeredAmountInr !== 'number' || isNaN(offeredAmountInr) || offeredAmountInr <= 0) {
+      return {
+        isValid: false,
+        error: 'Offered amount must be a number greater than zero.',
+        code: 'INVALID_AMOUNT',
+        minPriceInr: range.minPriceInr,
+        maxPriceInr: range.maxPriceInr,
+      };
+    }
+
+    const roundedAmount = Math.round(offeredAmountInr);
+
+    if (roundedAmount < range.minPriceInr) {
+      return {
+        isValid: false,
+        error: `Bid amount ₹${roundedAmount} is below the fair price minimum of ₹${range.minPriceInr} for this job. Permitted fair price range: ₹${range.minPriceInr} - ₹${range.maxPriceInr}.`,
+        code: 'BID_BELOW_MINIMUM',
+        minPriceInr: range.minPriceInr,
+        maxPriceInr: range.maxPriceInr,
+      };
+    }
+
+    if (roundedAmount > range.maxPriceInr) {
+      return {
+        isValid: false,
+        error: `Bid amount ₹${roundedAmount} exceeds the fair price ceiling of ₹${range.maxPriceInr} for this job. Permitted fair price range: ₹${range.minPriceInr} - ₹${range.maxPriceInr}.`,
+        code: 'BID_ABOVE_MAXIMUM',
+        minPriceInr: range.minPriceInr,
+        maxPriceInr: range.maxPriceInr,
+      };
+    }
+
+    return {
+      isValid: true,
+      minPriceInr: range.minPriceInr,
+      maxPriceInr: range.maxPriceInr,
+    };
+  }
 }
