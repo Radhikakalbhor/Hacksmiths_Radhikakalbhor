@@ -20,7 +20,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateEmail, validateNumericOtp, validateEmailOtpCode, validateOtpCode } from '@/lib/validations/auth';
-import { resolveOAuthRoleAndDestination } from '@/app/auth/callback/route';
+import { resolveOAuthRoleAndDestination } from '@/lib/auth/oauth';
 
 describe('Email OTP Authentication, 8-Digit Token & Expiration Tests', () => {
   describe('1. Configured OTP Length & Validation (8-Digit Primary, 6-Digit Secondary)', () => {
@@ -310,7 +310,7 @@ describe('Email OTP Authentication, 8-Digit Token & Expiration Tests', () => {
     }
 
     function getDestination(finalRole: 'customer' | 'worker'): string {
-      return finalRole === 'worker' ? '/dashboard?role=worker' : '/dashboard';
+      return finalRole === 'worker' ? '/dashboard?role=worker' : '/post-job';
     }
 
     it('should NEVER convert an existing worker into a customer even if customer tab was chosen', () => {
@@ -322,24 +322,24 @@ describe('Email OTP Authentication, 8-Digit Token & Expiration Tests', () => {
     it('should NEVER convert an existing customer into a worker without onboarding', () => {
       const finalRole = resolveUserRole('customer', 'worker');
       assert.equal(finalRole, 'customer', 'Customer role preserved');
-      assert.equal(getDestination(finalRole), '/dashboard');
+      assert.equal(getDestination(finalRole), '/post-job');
     });
 
-    it('should route new customers to /dashboard and new workers to /dashboard?role=worker', () => {
-      assert.equal(getDestination(resolveUserRole(null, 'customer')), '/dashboard');
+    it('should route new customers to /post-job and new workers to /dashboard?role=worker', () => {
+      assert.equal(getDestination(resolveUserRole(null, 'customer')), '/post-job');
       assert.equal(getDestination(resolveUserRole(null, 'worker')), '/dashboard?role=worker');
     });
   });
 
   describe('6. Regression Prevention: Google OAuth Invariant', () => {
-    it('Google OAuth role resolution and callback behavior remains 100% intact', () => {
+    it('Google OAuth role resolution and callback behavior directs customer to /post-job', () => {
       const customerResult = resolveOAuthRoleAndDestination({
         existingProfileRole: null,
         requestedRoleParam: 'customer',
         redirectParam: null,
       });
       assert.equal(customerResult.finalRole, 'customer');
-      assert.equal(customerResult.destination, '/dashboard');
+      assert.equal(customerResult.destination, '/post-job');
 
       const workerResult = resolveOAuthRoleAndDestination({
         existingProfileRole: null,

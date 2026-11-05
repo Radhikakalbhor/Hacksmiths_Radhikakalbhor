@@ -30,7 +30,12 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialRole = searchParams.get('role') === 'worker' ? 'worker' : 'customer';
-  const redirectTo = searchParams.get('redirect') || (initialRole === 'worker' ? '/dashboard?role=worker' : '/dashboard');
+  const defaultRedirect = initialRole === 'worker' ? '/dashboard?role=worker' : '/post-job';
+  const rawRedirect = searchParams.get('redirect');
+  const redirectTo =
+    rawRedirect === '/dashboard' && initialRole !== 'worker'
+      ? '/post-job'
+      : rawRedirect || defaultRedirect;
 
   const [role, setRole] = useState<'customer' | 'worker'>(initialRole);
   const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp');
@@ -111,7 +116,12 @@ function LoginContent() {
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const targetRedirect = redirectTo || (role === 'worker' ? '/dashboard?role=worker' : '/dashboard');
+      const defaultTarget = role === 'worker' ? '/dashboard?role=worker' : '/post-job';
+      const rawTarget = searchParams.get('redirect');
+      const targetRedirect =
+        role === 'customer' && (rawTarget === '/dashboard' || !rawTarget)
+          ? '/post-job'
+          : rawTarget || defaultTarget;
       const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
 
       const { error } = await supabase.auth.signInWithOAuth({
@@ -168,7 +178,12 @@ function LoginContent() {
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const targetRedirect = redirectTo || (role === 'worker' ? '/dashboard?role=worker' : '/dashboard');
+      const defaultTarget = role === 'worker' ? '/dashboard?role=worker' : '/post-job';
+      const rawTarget = searchParams.get('redirect');
+      const targetRedirect =
+        role === 'customer' && (rawTarget === '/dashboard' || !rawTarget)
+          ? '/post-job'
+          : rawTarget || defaultTarget;
       const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
 
       const { error } = await supabase.auth.signInWithOtp({
@@ -342,7 +357,9 @@ function LoginContent() {
       setSuccessMsg('Authentication verified successfully! Establishing session and redirecting...');
 
       const targetDestination =
-        finalRole === 'worker' ? '/dashboard?role=worker' : redirectTo || '/dashboard';
+        finalRole === 'worker'
+          ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
+          : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
 
       setTimeout(() => {
         router.push(targetDestination);
@@ -400,8 +417,12 @@ function LoginContent() {
           setErrorMsg(error.message);
         } else if (data.session) {
           setSuccessMsg('Account created and logged in! Redirecting...');
+          const targetDestination =
+            (isRegisteringWorker || role === 'worker')
+              ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
+              : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
           setTimeout(() => {
-            router.push(redirectTo);
+            router.push(targetDestination);
             router.refresh();
           }, 1000);
         } else {
@@ -418,8 +439,12 @@ function LoginContent() {
           setErrorMsg(error.message);
         } else if (data.session) {
           setSuccessMsg('Signed in successfully! Redirecting...');
+          const targetDestination =
+            (isRegisteringWorker || role === 'worker')
+              ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
+              : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
           setTimeout(() => {
-            router.push(redirectTo);
+            router.push(targetDestination);
             router.refresh();
           }, 1000);
         }
@@ -472,9 +497,15 @@ function LoginContent() {
               variant="primary"
               size="sm"
               className="w-full text-xs"
-              onClick={() => router.push(redirectTo)}
+              onClick={() => {
+                const target =
+                  role === 'worker'
+                    ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
+                    : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
+                router.push(target);
+              }}
             >
-              Continue to {redirectTo === '/post-job' ? 'Post a Job' : 'Dashboard'}
+              Continue to {role === 'worker' ? 'Dashboard' : 'Create Service Request'}
             </Button>
             <Button
               variant="secondary"

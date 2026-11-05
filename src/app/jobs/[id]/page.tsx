@@ -32,6 +32,7 @@ import {
   Timer,
   AlertTriangle,
   XCircle,
+  Calendar,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -68,6 +69,8 @@ interface JobDetails {
   service_location?: unknown;
   estimated_min_price_inr?: number | null;
   estimated_max_price_inr?: number | null;
+  scheduled_date?: string | null;
+  scheduled_time_slot?: string | null;
   created_at: string;
   ai_details?: {
     booking?: BookingState;
@@ -598,14 +601,14 @@ function JobDiscoveryContent() {
         <h2 className="text-lg font-bold text-[#152220]">Service Request Not Found</h2>
         <p className="text-xs text-[#576563]">{jobError || 'The requested job ID could not be loaded.'}</p>
         <div className="pt-2 flex justify-center gap-3">
-          <Link href="/dashboard">
+          <Link href="/post-job">
             <Button variant="primary" size="sm">
-              Go to My Jobs Dashboard
+              Create Service Request
             </Button>
           </Link>
-          <Link href="/post-job">
+          <Link href="/bookings">
             <Button variant="secondary" size="sm">
-              Post New Request
+              View Booking History
             </Button>
           </Link>
         </div>
@@ -694,11 +697,11 @@ function JobDiscoveryContent() {
       {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <Link
-          href="/dashboard"
+          href="/post-job"
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#576563] hover:text-[#0D4A52] transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Dashboard</span>
+          <span>Back to Service Requests</span>
         </Link>
       </div>
 
@@ -1304,7 +1307,7 @@ function JobDiscoveryContent() {
         </p>
 
         {/* Location & Budget Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-3 border-t border-gray-100 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
           <div className="flex items-center gap-2 text-[#576563]">
             <MapPin className="w-4 h-4 text-[#217E66] shrink-0" />
             <span className="truncate">
@@ -1318,6 +1321,13 @@ function JobDiscoveryContent() {
               {job.estimated_min_price_inr
                 ? `₹${job.estimated_min_price_inr} - ₹${job.estimated_max_price_inr || job.estimated_min_price_inr}`
                 : 'Budget Flexible'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 text-[#576563]">
+            <Calendar className="w-4 h-4 text-[#217E66] shrink-0" />
+            <span className="truncate font-medium text-[#0D4A52]">
+              {job.scheduled_time_slot ? `${job.scheduled_date ? `${job.scheduled_date} • ` : ''}${job.scheduled_time_slot}` : 'Flexible timing'}
             </span>
           </div>
 
@@ -1388,9 +1398,9 @@ function JobDiscoveryContent() {
                   <span>Expand Search Radius to {((searchRadius + 15000) / 1000).toFixed(0)} km</span>
                 </Button>
               )}
-              <Link href="/dashboard">
+              <Link href="/post-job">
                 <Button variant="primary" size="sm" className="text-xs">
-                  Go to My Jobs Dashboard
+                  Create Service Request
                 </Button>
               </Link>
             </div>

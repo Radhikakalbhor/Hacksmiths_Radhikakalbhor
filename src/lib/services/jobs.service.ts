@@ -84,10 +84,11 @@ export class JobsService {
       landmark: input.landmark ?? null,
       city: input.city,
       pincode: input.pincode,
+      estimated_budget_inr: input.estimatedBudgetInr ?? null,
       estimated_min_price_inr: input.estimatedMinPriceInr ?? input.estimatedBudgetInr ?? null,
       estimated_max_price_inr: input.estimatedMaxPriceInr ?? null,
-      scheduled_date: input.scheduledDate ?? null,
-      scheduled_time_slot: input.scheduledTimeSlot ?? null,
+      scheduled_date: input.scheduledDate ?? (input as { scheduled_date?: string }).scheduled_date ?? null,
+      scheduled_time_slot: input.scheduledTimeSlot ?? (input as { scheduled_time_slot?: string }).scheduled_time_slot ?? null,
       photo_urls: input.photoUrls && Array.isArray(input.photoUrls) ? input.photoUrls : [],
       ai_details: ((input as { aiDetails?: Json }).aiDetails ?? {}) as Json,
     };

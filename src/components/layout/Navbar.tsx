@@ -13,6 +13,7 @@ function NavbarContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<'customer' | 'worker' | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const pathname = usePathname();
 
@@ -47,18 +48,33 @@ function NavbarContent() {
       if (!sessionUser) {
         setUserEmail(null);
         setDisplayName(null);
+        setUserRole(null);
         return;
       }
       setUserEmail(sessionUser.email ?? null);
+      let detectedRole: 'customer' | 'worker' =
+        sessionUser.user_metadata?.role === 'worker' ? 'worker' : 'customer';
+
       const metaName = sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name;
       if (metaName) {
         setDisplayName(metaName);
-      } else {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', sessionUser.id)
-          .maybeSingle();
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', sessionUser.id)
+        .maybeSingle();
+
+      if (profile?.role === 'worker') {
+        detectedRole = 'worker';
+      } else if (profile?.role === 'customer') {
+        detectedRole = 'customer';
+      }
+
+      setUserRole(detectedRole);
+
+      if (!metaName) {
         if (profile?.full_name) {
           setDisplayName(profile.full_name);
         } else if (sessionUser.email) {
@@ -86,10 +102,16 @@ function NavbarContent() {
       await supabase.auth.signOut();
       setUserEmail(null);
       setDisplayName(null);
+      setUserRole(null);
     }
   };
 
   const isAuthPage = pathname === '/login' || pathname.startsWith('/login');
+  const marketplaceHref = userRole === 'worker' ? '/dashboard?role=worker' : '/post-job';
+  const isMarketplaceActive =
+    userRole === 'worker'
+      ? pathname === '/dashboard'
+      : pathname === '/post-job' || pathname === '/dashboard';
 
   return (
     <>
@@ -119,14 +141,14 @@ function NavbarContent() {
           {/* Desktop Nav Links - Single Horizontal Card */}
           <nav className="hidden md:flex items-center p-1 bg-white/95 backdrop-blur-sm border border-[#E5DFD2] rounded-full shadow-xs gap-0.5 lg:gap-1">
             <Link
-              href="/dashboard"
+              href={marketplaceHref}
               className={`text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all whitespace-nowrap ${
-                pathname === '/dashboard'
+                isMarketplaceActive
                   ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold shadow-xs'
                   : 'text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80'
               }`}
             >
-              <Briefcase className={`w-3.5 h-3.5 ${pathname === '/dashboard' ? 'text-[#0D4A52]' : 'text-[#217E66]'}`} />
+              <Briefcase className={`w-3.5 h-3.5 ${isMarketplaceActive ? 'text-[#0D4A52]' : 'text-[#217E66]'}`} />
               <span>Marketplace & Jobs</span>
             </Link>
 
@@ -230,15 +252,15 @@ function NavbarContent() {
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-[#E5DFD2] bg-[#FAF9F5] px-4 pt-2 pb-6 space-y-3">
           <Link
-            href="/dashboard"
+            href={marketplaceHref}
             onClick={() => setMobileMenuOpen(false)}
             className={`block px-3 py-2 rounded-md text-base ${
-              pathname === '/dashboard'
+              isMarketplaceActive
                 ? 'font-semibold text-[#0D4A52] bg-[#EBF4F3]'
                 : 'font-medium text-[#152220] hover:bg-[#F3EFE6]'
             }`}
           >
-            Marketplace & Jobs Dashboard
+            Marketplace & Jobs
           </Link>
           <Link
             href="/bookings"
@@ -354,7 +376,7 @@ export function NavbarFallback() {
           {/* Desktop Nav Links */}
           <nav className="hidden md:flex items-center p-1 bg-white/95 backdrop-blur-sm border border-[#E5DFD2] rounded-full shadow-xs gap-0.5 lg:gap-1">
             <Link
-              href="/dashboard"
+              href="/post-job"
               className="text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80 transition-all whitespace-nowrap"
             >
               <Briefcase className="w-3.5 h-3.5 text-[#217E66]" />

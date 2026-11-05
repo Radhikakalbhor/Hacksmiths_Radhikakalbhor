@@ -17,6 +17,13 @@ import {
   Briefcase,
   User,
   Compass,
+  Calendar,
+  Clock,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  ShieldAlert,
+  Calculator,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -25,9 +32,19 @@ import {
   OTHER_CUSTOM_CATEGORY,
 } from '@/lib/config/constants';
 import { ServiceCategory, JobUrgency } from '@/types/jobs';
+import { PricingService, FairPricingEngineResult } from '@/lib/services/pricing.service';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { reverseGeocodeCoordinates } from '@/lib/utils/geocoding';
 import { CustomerProfileModal } from '@/components/profile/CustomerProfileModal';
+import {
+  getKolkataNow,
+  formatScheduledDisplay,
+  getStandardDateOptions,
+  getStandardTimeOptions,
+  getSameDayTimeOptions,
+  getEmergencyTimeOptions,
+  TimeOption,
+} from '@/lib/utils/scheduling';
 
 const DRAFT_STORAGE_KEY = 'sahayak_job_draft_v1';
 
@@ -37,6 +54,8 @@ interface DraftData {
   title: string;
   description: string;
   urgency: JobUrgency;
+  scheduledDate?: string;
+  scheduledTimeSlot?: string;
   addressLine: string;
   landmark: string;
   city: string;
@@ -89,6 +108,75 @@ function PostJobForm() {
 
   const [description, setDescription] = useState(() => initialDraft.description || '');
   const [urgency, setUrgency] = useState<JobUrgency>(() => (initialDraft.urgency === 'urgent' ? 'same_day' : initialDraft.urgency) || 'standard');
+
+  // Date and Time selection state
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    if (initialDraft.scheduledDate) return initialDraft.scheduledDate;
+    const now = getKolkataNow();
+    const effectiveUrgency = (initialDraft.urgency === 'urgent' ? 'same_day' : initialDraft.urgency) || 'standard';
+    if (effectiveUrgency === 'same_day' || effectiveUrgency === 'emergency') {
+      return now.dateStr;
+    }
+    const standardDates = getStandardDateOptions(3);
+    return standardDates[0]?.dateStr || now.dateStr;
+  });
+
+  const [selectedTime, setSelectedTime] = useState<string>(() => {
+    if (initialDraft.scheduledTimeSlot) return initialDraft.scheduledTimeSlot;
+    const effectiveUrgency = (initialDraft.urgency === 'urgent' ? 'same_day' : initialDraft.urgency) || 'standard';
+    if (effectiveUrgency === 'emergency') {
+      const emergencyOpts = getEmergencyTimeOptions();
+      return emergencyOpts[0]?.value || '';
+    }
+    if (effectiveUrgency === 'same_day') {
+      const sameDayOpts = getSameDayTimeOptions();
+      return sameDayOpts[0]?.value || '';
+    }
+    return '10:00 AM';
+  });
+
+  // Urgency change handler that dynamically configures date and time
+  const handleUrgencyChange = (newUrgency: JobUrgency) => {
+    setUrgency(newUrgency);
+    const now = getKolkataNow();
+
+    if (newUrgency === 'same_day') {
+      setSelectedDate(now.dateStr);
+      const sameDayOpts = getSameDayTimeOptions();
+      const stillValid = sameDayOpts.some((opt) => opt.value === selectedTime);
+      if (!stillValid) {
+        setSelectedTime(sameDayOpts[0]?.value || '');
+      }
+    } else if (newUrgency === 'emergency') {
+      setSelectedDate(now.dateStr);
+      const emergencyOpts = getEmergencyTimeOptions();
+      setSelectedTime(emergencyOpts[0]?.value || '');
+    } else {
+      const standardDates = getStandardDateOptions(3);
+      const isDateValidStandard = standardDates.some((d) => d.dateStr === selectedDate);
+      if (!isDateValidStandard) {
+        setSelectedDate(standardDates[0]?.dateStr || now.dateStr);
+      }
+      const standardTimes = getStandardTimeOptions();
+      const isTimeValid = standardTimes.some((t) => t.value === selectedTime);
+      if (!isTimeValid) {
+        setSelectedTime(standardTimes[1]?.value || standardTimes[0]?.value || '10:00 AM');
+      }
+    }
+  };
+
+  const standardDateOptions = React.useMemo(() => getStandardDateOptions(3), []);
+
+  const availableTimeOptions: TimeOption[] = React.useMemo(() => {
+    if (urgency === 'emergency') {
+      return getEmergencyTimeOptions();
+    }
+    if (urgency === 'same_day') {
+      return getSameDayTimeOptions();
+    }
+    return getStandardTimeOptions();
+  }, [urgency, selectedDate]);
+
   const [addressLine, setAddressLine] = useState(() => initialDraft.addressLine || '');
   const [landmark, setLandmark] = useState(() => initialDraft.landmark || '');
   const [city, setCity] = useState(() => initialDraft.city || 'Mumbai');
@@ -120,79 +208,72 @@ function PostJobForm() {
     }
   };
 
-  // Local Micro-Market Pricing Benchmark
-  const [benchmark, setBenchmark] = useState<{
-    min: number;
-    median: number;
-    max: number;
-    area: string;
-  } | null>(null);
-  const [loadingBenchmark, setLoadingBenchmark] = useState(false);
+  // Centralized Fair Pricing Engine State
+  const [pricingEstimate, setPricingEstimate] = useState<FairPricingEngineResult>(() => {
+    return PricingService.calculateFairPriceRange({
+      category,
+      title: initialDraft.title || '',
+      description: initialDraft.description || '',
+      urgency,
+      userBudget: initialDraft.estimatedBudgetInr ? parseFloat(initialDraft.estimatedBudgetInr) : null,
+      city,
+    });
+  });
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
+  const [showPricingBreakdown, setShowPricingBreakdown] = useState(false);
 
-  // Fetch neighborhood pricing benchmark when category or city changes
+  // Instant local rule-based price calculation + debounced server-side AI enrichment
   useEffect(() => {
+    const userBudgetNum = estimatedBudgetInr ? parseFloat(estimatedBudgetInr) : null;
+
+    // 1. Instant 0ms local calculation: Rule-based engine calculates transparent price immediately
+    const instantResult = PricingService.calculateFairPriceRange({
+      category,
+      title,
+      description,
+      urgency,
+      userBudget: userBudgetNum,
+      city,
+    });
+    setPricingEstimate(instantResult);
+
+    // 2. Debounced server-side call for optional AI understanding & complexity assessment
+    if (!title.trim() && !description.trim()) return;
+
     let isCancelled = false;
-    const fetchBenchmark = async () => {
+    const timer = setTimeout(async () => {
       try {
-        setLoadingBenchmark(true);
-        const supabase = getSupabaseBrowserClient();
-        if (!supabase) return;
+        setLoadingEstimate(true);
+        const res = await fetch('/api/pricing/estimate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category,
+            title,
+            description,
+            urgency,
+            userBudget: userBudgetNum,
+            city,
+          }),
+        });
 
-        const effectiveCategoryQuery =
-          category === 'other'
-            ? 'other'
-            : category.toLowerCase();
-
-        const cityPrefix = city.split(' ')[0] || city;
-        const { data: areaData } = await supabase
-          .from('price_benchmarks')
-          .select('min_price_inr, median_price_inr, max_price_inr, micro_market_area')
-          .eq('category', effectiveCategoryQuery)
-          .ilike('city', `%${cityPrefix}%`)
-          .order('sample_size', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (!isCancelled && areaData) {
-          setBenchmark({
-            min: Number(areaData.min_price_inr),
-            median: Number(areaData.median_price_inr),
-            max: Number(areaData.max_price_inr),
-            area: areaData.micro_market_area,
-          });
-          return;
-        }
-
-        const { data: genData } = await supabase
-          .from('price_benchmarks')
-          .select('min_price_inr, median_price_inr, max_price_inr, micro_market_area')
-          .eq('category', effectiveCategoryQuery)
-          .order('sample_size', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (!isCancelled && genData) {
-          setBenchmark({
-            min: Number(genData.min_price_inr),
-            median: Number(genData.median_price_inr),
-            max: Number(genData.max_price_inr),
-            area: genData.micro_market_area,
-          });
-        } else if (!isCancelled) {
-          setBenchmark(null);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isCancelled && data.success && data.data) {
+          setPricingEstimate(data.data);
         }
       } catch {
-        if (!isCancelled) setBenchmark(null);
+        // Fallback remains completely seamless via local calculation
       } finally {
-        if (!isCancelled) setLoadingBenchmark(false);
+        if (!isCancelled) setLoadingEstimate(false);
       }
-    };
+    }, 600);
 
-    fetchBenchmark();
     return () => {
       isCancelled = true;
+      clearTimeout(timer);
     };
-  }, [category, city]);
+  }, [category, title, description, urgency, estimatedBudgetInr, city]);
 
   // Photo Attachment
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -213,6 +294,8 @@ function PostJobForm() {
     id: string;
     title: string;
     status: string;
+    scheduled_date?: string | null;
+    scheduled_time_slot?: string | null;
   } | null>(null);
 
   // 1. Verify user authentication & profile role
@@ -317,6 +400,8 @@ function PostJobForm() {
         title,
         description,
         urgency,
+        scheduledDate: selectedDate,
+        scheduledTimeSlot: selectedTime,
         addressLine,
         landmark,
         city,
@@ -335,6 +420,8 @@ function PostJobForm() {
     title,
     description,
     urgency,
+    selectedDate,
+    selectedTime,
     addressLine,
     landmark,
     city,
@@ -441,6 +528,8 @@ function PostJobForm() {
           title,
           description,
           urgency,
+          scheduledDate: selectedDate,
+          scheduledTimeSlot: selectedTime,
           addressLine,
           landmark,
           city,
@@ -483,6 +572,17 @@ function PostJobForm() {
       return;
     }
 
+    // Date & Time selection validation
+    if (!selectedDate) {
+      setErrorMsg('Please select your preferred service date.');
+      return;
+    }
+
+    if (!selectedTime) {
+      setErrorMsg('Please select your preferred individual service start time.');
+      return;
+    }
+
     if (!addressLine.trim() || addressLine.trim().length < 3) {
       setErrorMsg('Please enter your complete street address (at least 3 characters).');
       return;
@@ -519,6 +619,8 @@ function PostJobForm() {
         title: title.trim(),
         description: description.trim() || undefined,
         urgency,
+        scheduledDate: selectedDate,
+        scheduledTimeSlot: selectedTime,
         latitude,
         longitude,
         addressLine: addressLine.trim(),
@@ -526,6 +628,8 @@ function PostJobForm() {
         city: city.trim(),
         pincode: pincode.trim(),
         estimatedBudgetInr: estimatedBudgetInr ? parseFloat(estimatedBudgetInr) : undefined,
+        estimatedMinPriceInr: pricingEstimate?.recommendedMinInr,
+        estimatedMaxPriceInr: pricingEstimate?.recommendedMaxInr,
       };
 
       const supabaseClient = getSupabaseBrowserClient();
@@ -629,6 +733,12 @@ function PostJobForm() {
             <span className="text-[#576563]">Title:</span>
             <span className="font-semibold text-[#152220]">{createdJobData.title}</span>
           </div>
+          <div className="flex items-center justify-between border-b border-[#E5DFD2] pb-2">
+            <span className="text-[#576563]">Preferred Schedule:</span>
+            <span className="font-semibold text-[#0D4A52]">
+              {formatScheduledDisplay(createdJobData.scheduled_date || selectedDate, createdJobData.scheduled_time_slot || selectedTime)}
+            </span>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-[#576563]">Status:</span>
             <Badge variant="green">{createdJobData.status}</Badge>
@@ -642,10 +752,10 @@ function PostJobForm() {
               <span>Explore Matching Workers &amp; Dispatch</span>
             </Button>
           </Link>
-          <Link href="/dashboard" className="w-full">
+          <Link href="/bookings" className="w-full">
             <Button variant="secondary" className="w-full gap-1.5">
               <Briefcase className="w-4 h-4" />
-              <span>Track in My Jobs Dashboard</span>
+              <span>Track in Booking History</span>
             </Button>
           </Link>
         </div>
@@ -898,7 +1008,7 @@ function PostJobForm() {
                 <button
                   key={u.id}
                   type="button"
-                  onClick={() => setUrgency(u.id as JobUrgency)}
+                  onClick={() => handleUrgencyChange(u.id as JobUrgency)}
                   className={`p-3 rounded-xl border text-left transition-all ${
                     isSelected
                       ? 'bg-[#EBF4F3] border-[#0D4A52] ring-1 ring-[#0D4A52]'
@@ -913,11 +1023,164 @@ function PostJobForm() {
           </div>
         </div>
 
-        {/* 4. Service Location */}
+        {/* 4. Preferred Service Date & Time (Dynamic based on Urgency) */}
+        <div className="space-y-3.5 p-4 bg-[#FAF9F5] border border-[#E5DFD2] rounded-2xl animate-in fade-in">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-[#152220] flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-[#0D4A52]" />
+              <span>4. Preferred Service Date &amp; Time</span>
+              <span className="text-red-500">*</span>
+            </label>
+            {urgency === 'emergency' && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+                <Zap className="w-3 h-3 text-amber-600 fill-amber-500" />
+                <span>Priority Dispatch</span>
+              </span>
+            )}
+            {urgency === 'same_day' && (
+              <span className="text-[11px] font-medium text-[#217E66] bg-[#EDF7F4] border border-[#BCE5DA] px-2 py-0.5 rounded-full shrink-0">
+                Today&apos;s Service
+              </span>
+            )}
+            {urgency === 'standard' && (
+              <span className="text-[11px] font-medium text-[#576563] bg-white border border-[#E5DFD2] px-2 py-0.5 rounded-full shrink-0">
+                Flexible (Next 2–3 Days)
+              </span>
+            )}
+          </div>
+
+          {/* Date Picker / Selection Display */}
+          <div className="space-y-2">
+            <span className="text-[11px] font-semibold text-[#576563] block">
+              {urgency === 'standard' ? 'Select Preferred Date (Next 2–3 Days)' : 'Service Date'}
+            </span>
+
+            {urgency === 'standard' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {standardDateOptions.map((opt) => {
+                  const isDateSelected = selectedDate === opt.dateStr;
+                  return (
+                    <button
+                      key={opt.dateStr}
+                      type="button"
+                      onClick={() => setSelectedDate(opt.dateStr)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        isDateSelected
+                          ? 'bg-[#EBF4F3] border-[#0D4A52] ring-1 ring-[#0D4A52] shadow-xs'
+                          : 'bg-white border-[#E5DFD2] hover:bg-[#FAF9F5]'
+                      }`}
+                    >
+                      <span className="text-xs font-bold block text-[#152220]">{opt.label}</span>
+                      <span className="text-[10px] text-[#576563] block">{opt.sub}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              /* Same Day or Emergency: Today's date is locked and clearly displayed with IST timezone */
+              <div className="p-3 bg-white border border-[#BCE5DA] rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#EBF4F3] flex items-center justify-center text-[#0D4A52]">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-[#152220] block">
+                      {new Intl.DateTimeFormat('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        weekday: 'long',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      }).format(new Date())}
+                    </span>
+                    <span className="text-[10px] text-[#217E66] font-medium block">
+                      Today • Asia/Kolkata IST
+                    </span>
+                  </div>
+                </div>
+                <Badge variant={urgency === 'emergency' ? 'amber' : 'teal'}>
+                  {urgency === 'emergency' ? 'Dispatch ASAP' : 'Today'}
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          {/* Individual Preferred Time Selection */}
+          <div className="space-y-2 pt-2 border-t border-[#E5DFD2]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-[#576563] flex items-center gap-1">
+                <Clock className="w-3 h-3 text-[#0D4A52]" />
+                <span>
+                  {urgency === 'emergency'
+                    ? 'Earliest Available Start Times (1–2 hrs)'
+                    : 'Select Preferred Service Start Time'}
+                </span>
+              </span>
+              {selectedTime && (
+                <span className="text-[11px] font-bold text-[#0D4A52] bg-[#EBF4F3] px-2 py-0.5 rounded-full shrink-0">
+                  Selected: {selectedTime}
+                </span>
+              )}
+            </div>
+
+            {availableTimeOptions.length === 0 ? (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                It is currently past standard same-day operating hours. Please select <strong>Standard</strong> to choose tomorrow or upcoming days.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                {availableTimeOptions.map((timeOpt) => {
+                  const isTimeSelected = selectedTime === timeOpt.value;
+                  return (
+                    <button
+                      key={timeOpt.value}
+                      type="button"
+                      onClick={() => setSelectedTime(timeOpt.value)}
+                      className={`p-2 rounded-xl border text-center transition-all cursor-pointer relative ${
+                        isTimeSelected
+                          ? 'bg-[#0D4A52] border-[#0D4A52] text-white font-bold shadow-xs'
+                          : timeOpt.isPriority
+                          ? 'bg-[#EDF7F4] border-[#217E66] text-[#0D4A52] font-semibold hover:bg-[#D8ECE8]'
+                          : 'bg-white border-[#E5DFD2] text-[#152220] hover:bg-[#FAF9F5] font-medium'
+                      }`}
+                    >
+                      <span className="text-xs block">{timeOpt.label}</span>
+                      {timeOpt.hint && (
+                        <span
+                          className={`text-[9px] block leading-tight ${
+                            isTimeSelected ? 'text-teal-100' : 'text-[#217E66]'
+                          }`}
+                        >
+                          {timeOpt.hint}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="text-[10px] text-[#83928E]">
+              * Select your preferred arrival start time (not a duration window).
+            </p>
+          </div>
+
+          {/* Formatted Summary Pill */}
+          {selectedDate && selectedTime && (
+            <div className="p-2.5 bg-white border border-[#E5DFD2] rounded-xl flex items-center justify-between text-xs">
+              <span className="text-[#576563]">Scheduled Preference:</span>
+              <span className="font-semibold text-[#0D4A52]">
+                {formatScheduledDisplay(selectedDate, selectedTime)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* 5. Service Location */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="block text-xs font-bold uppercase tracking-wider text-[#152220]">
-              4. Service Address <span className="text-red-500">*</span>
+              5. Service Address <span className="text-red-500">*</span>
             </label>
             <button
               type="button"
@@ -984,11 +1247,115 @@ function PostJobForm() {
           </div>
         </div>
 
-        {/* 5. Optional Budget */}
-        <div className="pt-2 border-t border-[#E5DFD2]">
-          <div className="max-w-md">
-            <label className="block text-xs font-semibold text-[#152220] mb-1">
-              Estimated Budget (₹ INR, Optional)
+        {/* 6. Estimated Budget & Fair Pricing Engine */}
+        <div className="pt-2 border-t border-[#E5DFD2] space-y-4">
+          <div className="space-y-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#152220] flex items-center gap-1.5">
+              <Calculator className="w-3.5 h-3.5 text-[#0D4A52]" />
+              <span>6. Estimated Budget &amp; Fair Price Recommendation</span>
+            </label>
+            <p className="text-[11px] text-[#576563]">
+              Sahayak calculates a fair price range based on task complexity, standard labor hours, and local rates.
+            </p>
+          </div>
+
+          {/* Centralized Fair Price Recommendation Card */}
+          <div className="p-4 bg-[#FAF9F5] border border-[#BCE5DA] rounded-2xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-[#576563]">Recommended Fair Range:</span>
+                  <Badge variant="teal" className="text-[10px]">
+                    {pricingEstimate.modelConfidence === 'ai_assisted' ? 'AI-Assisted Benchmark' : 'Rule-Based Benchmark'}
+                  </Badge>
+                  {loadingEstimate && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-[#217E66]">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Refining...</span>
+                    </span>
+                  )}
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-[#0D4A52] tracking-tight">
+                  ₹{pricingEstimate.recommendedMinInr} – ₹{pricingEstimate.recommendedMaxInr}
+                </div>
+                {pricingEstimate.aiAssessment?.detectedProblem && (
+                  <p className="text-[11px] text-[#217E66] font-medium flex items-center gap-1 mt-0.5">
+                    <Sparkles className="w-3 h-3 shrink-0" />
+                    <span>Issue: {pricingEstimate.aiAssessment.detectedProblem}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setEstimatedBudgetInr(pricingEstimate.suggestedBudgetInr.toString())}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EDF7F4] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52] hover:bg-[#D8ECE8] transition-colors cursor-pointer shadow-2xs"
+                  title="Click to populate with recommended fair budget"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#217E66]" />
+                  <span>Use Suggested Budget: ₹{pricingEstimate.suggestedBudgetInr}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPricingBreakdown((prev) => !prev)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white border border-[#E5DFD2] text-xs font-medium text-[#576563] hover:text-[#152220] transition-colors cursor-pointer"
+                  title="View transparent formula breakdown"
+                >
+                  <span>{showPricingBreakdown ? 'Hide Breakdown' : 'Breakdown'}</span>
+                  {showPricingBreakdown ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Collapsible Transparent Breakdown Drawer */}
+            {showPricingBreakdown && (
+              <div className="mt-3 pt-3 border-t border-[#E5DFD2] space-y-2.5 text-xs text-[#152220] animate-in fade-in">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] bg-white p-3 rounded-xl border border-[#E5DFD2]">
+                  <div className="flex items-center justify-between border-b border-[#FAF9F5] sm:border-b-0 pb-1 sm:pb-0">
+                    <span className="text-[#576563]">Base Category Labour:</span>
+                    <span className="font-semibold text-[#152220]">₹{pricingEstimate.breakdown.baseLabourInr}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#576563]">
+                      Complexity ({pricingEstimate.breakdown.complexityLevel.toUpperCase()}):
+                    </span>
+                    <span className="font-semibold text-[#152220]">
+                      ×{pricingEstimate.breakdown.complexityMultiplier.toFixed(2)} (₹{pricingEstimate.breakdown.adjustedLabourInr})
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-[#FAF9F5] sm:border-b-0 pb-1 sm:pb-0">
+                    <span className="text-[#576563]">Estimated Parts/Materials:</span>
+                    <span className="font-semibold text-[#152220]">
+                      {pricingEstimate.breakdown.estimatedMaterialsInr > 0
+                        ? `₹${pricingEstimate.breakdown.estimatedMaterialsInr}`
+                        : 'None estimated'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#576563]">Urgency Adjustment ({pricingEstimate.breakdown.urgencyLabel}):</span>
+                    <span className="font-semibold text-[#0D4A52]">
+                      {pricingEstimate.breakdown.urgencyFeeNotice}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between col-span-1 sm:col-span-2 pt-1 border-t border-[#E5DFD2]">
+                    <span className="text-[#576563]">Minimum Fair Visitation Floor:</span>
+                    <span className="font-semibold text-[#217E66]">₹{pricingEstimate.breakdown.minimumFairChargeInr}</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-[#576563] italic leading-relaxed">
+                  <strong>Why this price?</strong> {pricingEstimate.explanation}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Customer Custom Budget Input */}
+          <div className="max-w-md space-y-2">
+            <label className="block text-xs font-semibold text-[#152220]">
+              Your Target Budget (₹ INR, Optional)
             </label>
             <div className="relative">
               <IndianRupee className="w-4 h-4 text-[#83928E] absolute left-3 top-3" />
@@ -997,31 +1364,48 @@ function PostJobForm() {
                 min={0}
                 value={estimatedBudgetInr}
                 onChange={(e) => setEstimatedBudgetInr(e.target.value)}
-                placeholder="e.g. 500"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none"
+                placeholder={`e.g. ${pricingEstimate.suggestedBudgetInr}`}
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#E5DFD2] text-xs text-[#152220] focus:ring-2 focus:ring-[#0D4A52] outline-none bg-white font-medium"
               />
             </div>
-            {benchmark && (
-              <div className="mt-2 flex items-center gap-2">
+
+            {/* Dynamic Real-Time Budget Comparison Warning / Reassurance */}
+            {pricingEstimate.budgetValidation.status === 'BELOW_MINIMUM' && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 animate-in fade-in">
+                <div className="flex items-start gap-2 text-xs text-amber-900 font-semibold">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>Budget below recommended minimum</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  {pricingEstimate.budgetValidation.message}
+                </p>
                 <button
                   type="button"
-                  onClick={() => setEstimatedBudgetInr(benchmark.median.toString())}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EDF7F4] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52] hover:bg-[#D8ECE8] transition-colors"
+                  onClick={() => setEstimatedBudgetInr(pricingEstimate.recommendedMinInr.toString())}
+                  className="text-[11px] font-bold text-amber-900 underline hover:text-amber-950 cursor-pointer block"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-[#217E66]" />
-                  <span>Fair Price: ₹{benchmark.median}</span>
-                  {!estimatedBudgetInr && (
-                    <span className="text-[11px] text-[#217E66] font-normal underline ml-1">
-                      (Use ₹{benchmark.median})
-                    </span>
-                  )}
+                  Adjust to Minimum Fair Floor (₹{pricingEstimate.recommendedMinInr})
                 </button>
               </div>
             )}
-            {loadingBenchmark && (
-              <p className="text-[10px] text-[#83928E] mt-1 flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Checking local price benchmarks...</span>
+
+            {pricingEstimate.budgetValidation.status === 'FAIR_MARKET' && (
+              <div className="p-2.5 bg-[#EDF7F4] border border-[#BCE5DA] rounded-xl flex items-center gap-2 text-xs text-[#0D4A52] animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-[#217E66] shrink-0" />
+                <span>{pricingEstimate.budgetValidation.message}</span>
+              </div>
+            )}
+
+            {pricingEstimate.budgetValidation.status === 'PREMIUM' && (
+              <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-2 text-xs text-[#0D4A52] animate-in fade-in">
+                <Zap className="w-4 h-4 text-[#217E66] shrink-0" />
+                <span>{pricingEstimate.budgetValidation.message}</span>
+              </div>
+            )}
+
+            {pricingEstimate.budgetValidation.status === 'NOT_ENTERED' && (
+              <p className="text-[11px] text-[#83928E]">
+                Leave blank to receive open market bids, or enter your preferred budget.
               </p>
             )}
           </div>
@@ -1047,9 +1431,12 @@ function PostJobForm() {
                 try {
                   const draft: DraftData = {
                     category,
+                    customCategoryName,
                     title,
                     description,
                     urgency,
+                    scheduledDate: selectedDate,
+                    scheduledTimeSlot: selectedTime,
                     addressLine,
                     landmark,
                     city,

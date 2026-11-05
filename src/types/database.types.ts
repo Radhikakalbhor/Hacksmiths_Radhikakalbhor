@@ -164,6 +164,7 @@ export interface Database {
           landmark: string | null;
           city: string;
           pincode: string;
+          estimated_budget_inr?: number | null;
           estimated_min_price_inr: number | null;
           estimated_max_price_inr: number | null;
           accepted_price_inr: number | null;
@@ -194,6 +195,7 @@ export interface Database {
           landmark?: string | null;
           city: string;
           pincode: string;
+          estimated_budget_inr?: number | null;
           estimated_min_price_inr?: number | null;
           estimated_max_price_inr?: number | null;
           accepted_price_inr?: number | null;
@@ -219,6 +221,7 @@ export interface Database {
           city?: string;
           pincode?: string;
           photo_urls?: string[] | null;
+          estimated_budget_inr?: number | null;
           estimated_min_price_inr?: number | null;
           estimated_max_price_inr?: number | null;
           accepted_price_inr?: number | null;

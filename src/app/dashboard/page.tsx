@@ -25,6 +25,7 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
+  Calendar,
 } from 'lucide-react';
 
 interface Job {
@@ -43,6 +44,8 @@ interface Job {
   estimated_min_price_inr: number | null;
   estimated_max_price_inr: number | null;
   accepted_price_inr: number | null;
+  scheduled_date?: string | null;
+  scheduled_time_slot?: string | null;
   created_at: string;
 }
 
@@ -135,6 +138,9 @@ function DashboardContent() {
         setSessionUser(null);
         setUserRole(null);
         setLoadingSession(false);
+        if (initialRole !== 'worker') {
+          router.replace('/post-job');
+        }
         return;
       }
 
@@ -163,6 +169,10 @@ function DashboardContent() {
       setUserRole(detectedRole);
       setActiveRole(detectedRole);
       setLoadingSession(false);
+
+      if (detectedRole === 'customer') {
+        router.replace('/post-job');
+      }
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -426,6 +436,18 @@ function DashboardContent() {
     }
   };
 
+  // Requirement: Customers should not land on /dashboard; redirect directly to /post-job
+  if (loadingSession || userRole === 'customer' || (!sessionUser && initialRole !== 'worker')) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex items-center gap-2 text-xs text-[#576563]">
+          <RefreshCw className="w-4 h-4 animate-spin text-[#0D4A52]" />
+          <span>Redirecting to Service Request...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-transparent py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -441,14 +463,10 @@ function DashboardContent() {
               </p>
             </div>
 
-            {/* Role View Badge (strictly hides worker marketplace for customer; hides customer view for worker) */}
+            {/* Role View Badge */}
             <div className="flex items-center gap-3 shrink-0">
               {loadingSession ? (
                 <span className="text-xs text-[#576563]">Loading...</span>
-              ) : userRole === 'customer' ? (
-                <div className="inline-flex items-center px-3.5 py-1.5 rounded-lg bg-[#EBF4F3] border border-[#BCE5DA] text-xs font-semibold text-[#0D4A52]">
-                  <span>Customer View</span>
-                </div>
               ) : userRole === 'worker' ? (
                 <div className="inline-flex items-center px-3.5 py-1.5 rounded-lg bg-[#0D4A52] text-white text-xs font-semibold shadow-xs">
                   <span>Worker Marketplace</span>
@@ -929,6 +947,12 @@ function DashboardContent() {
                                 : 'Budget Flexible'}
                             </span>
                           </div>
+                          {job.scheduled_time_slot && (
+                            <div className="col-span-2 flex items-center gap-1.5 text-[#0D4A52] font-semibold bg-[#EBF4F3] px-2.5 py-1 rounded-lg text-[11px]">
+                              <Calendar className="w-3.5 h-3.5 text-[#217E66]" />
+                              <span>Required: {job.scheduled_date ? `${job.scheduled_date} at ` : ''}{job.scheduled_time_slot}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 

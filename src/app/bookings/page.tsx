@@ -246,9 +246,9 @@ function BookingHistoryContent() {
                 Sign In to Sahayak
               </Button>
             </Link>
-            <Link href="/dashboard">
+            <Link href="/post-job">
               <Button variant="secondary" className="w-full sm:w-auto">
-                Browse Marketplace
+                Create Service Request
               </Button>
             </Link>
           </div>
@@ -434,9 +434,9 @@ function BookingHistoryContent() {
                 View All Bookings
               </Button>
             )}
-            <Link href="/dashboard">
+            <Link href="/post-job">
               <Button variant="primary" size="sm">
-                Explore Marketplace & Jobs
+                Create Service Request
               </Button>
             </Link>
           </div>
@@ -474,9 +474,14 @@ function BookingHistoryContent() {
                           {booking.category.replace('_', ' ')}
                         </span>
                       </div>
-                      <p className="text-xs text-[#576563] flex items-center gap-1.5">
+                      <p className="text-xs text-[#576563] flex items-center gap-1.5 flex-wrap">
                         <Clock className="w-3.5 h-3.5 text-[#217E66]" />
                         <span>Booked on {formattedTime.full}</span>
+                        {booking.scheduledTimeSlot && (
+                          <span className="inline-flex items-center gap-1 font-semibold text-[#0D4A52] bg-[#EBF4F3] px-2 py-0.5 rounded text-[11px]">
+                            Preferred: {booking.scheduledDate ? `${booking.scheduledDate} at ` : ''}{booking.scheduledTimeSlot}
+                          </span>
+                        )}
                       </p>
                     </div>
 

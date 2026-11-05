@@ -38,6 +38,8 @@ export interface BookingHistoryItem {
   addressLine: string | null;
   city: string | null;
   pincode: string | null;
+  scheduledDate?: string | null;
+  scheduledTimeSlot?: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -198,6 +200,8 @@ export async function GET(request: NextRequest) {
         addressLine: job.address_line,
         city: job.city,
         pincode: job.pincode,
+        scheduledDate: job.scheduled_date || null,
+        scheduledTimeSlot: job.scheduled_time_slot || null,
       };
     });
 

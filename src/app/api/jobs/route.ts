@@ -38,32 +38,23 @@ export async function POST(request: NextRequest) {
 
     const jobInput = validation.data;
 
-    // Lookup local indicative price benchmark to attach to the job record
-    let benchmarkEstimate: { min: number; median: number; max: number } | null = null;
-    if (supabase) {
-      const benchmark = await PricingService.fetchBenchmarkForArea(
-        supabase,
-        jobInput.category,
-        jobInput.city,
-        jobInput.addressLine
-      );
-
-      if (benchmark) {
-        benchmarkEstimate = {
-          min: benchmark.min_price_inr,
-          median: benchmark.median_price_inr,
-          max: benchmark.max_price_inr,
-        };
-      }
-    }
+    // Calculate fair price recommendation using the centralized pricing engine
+    const fairPricing = PricingService.calculateFairPriceRange({
+      category: jobInput.category,
+      title: jobInput.title,
+      description: jobInput.description,
+      urgency: jobInput.urgency,
+      userBudget: jobInput.estimatedBudgetInr,
+      city: jobInput.city,
+    });
 
     // Always use authenticated user's ID - never accept user ID from payload
     const jobPayload = JobsService.prepareJobInsert(user.id, jobInput);
 
-    if (benchmarkEstimate) {
-      jobPayload.estimated_min_price_inr = jobInput.estimatedMinPriceInr ?? jobInput.estimatedBudgetInr ?? benchmarkEstimate.min;
-      jobPayload.estimated_max_price_inr = jobInput.estimatedMaxPriceInr ?? benchmarkEstimate.max;
-    }
+    // Save customer's explicit budget and recommended fair market range
+    jobPayload.estimated_budget_inr = jobInput.estimatedBudgetInr ?? null;
+    jobPayload.estimated_min_price_inr = jobInput.estimatedMinPriceInr ?? fairPricing.recommendedMinInr;
+    jobPayload.estimated_max_price_inr = jobInput.estimatedMaxPriceInr ?? fairPricing.recommendedMaxInr;
 
     // Enforce database check constraint: estimated_max_price_inr >= estimated_min_price_inr
     if (
@@ -207,7 +198,12 @@ export async function POST(request: NextRequest) {
     return apiSuccess(
       {
         job,
-        indicativeBenchmark: benchmarkEstimate,
+        indicativeBenchmark: {
+          min: fairPricing.recommendedMinInr,
+          median: fairPricing.suggestedBudgetInr,
+          max: fairPricing.recommendedMaxInr,
+        },
+        fairPricing,
       },
       201
     );
