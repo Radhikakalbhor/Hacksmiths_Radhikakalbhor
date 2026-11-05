@@ -558,6 +558,292 @@ export interface Database {
           },
         ];
       };
+      platform_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          description: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value: Json;
+          description?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          value?: Json;
+          description?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      worker_wallets: {
+        Row: {
+          id: string;
+          worker_id: string;
+          available_balance_inr: number;
+          pending_balance_inr: number;
+          total_earned_inr: number;
+          total_withdrawn_inr: number;
+          total_deductions_inr: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          worker_id: string;
+          available_balance_inr?: number;
+          pending_balance_inr?: number;
+          total_earned_inr?: number;
+          total_withdrawn_inr?: number;
+          total_deductions_inr?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          available_balance_inr?: number;
+          pending_balance_inr?: number;
+          total_earned_inr?: number;
+          total_withdrawn_inr?: number;
+          total_deductions_inr?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'worker_wallets_worker_id_fkey';
+            columns: ['worker_id'];
+            isOneToOne: true;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      wallet_transactions: {
+        Row: {
+          id: string;
+          wallet_id: string;
+          worker_id: string;
+          job_id: string | null;
+          transaction_type: 'JOB_PAYOUT' | 'COMMISSION_DEDUCTION' | 'PENALTY_DEDUCTION' | 'WITHDRAWAL' | 'REFUND' | 'ADJUSTMENT';
+          amount_inr: number;
+          balance_after_inr: number;
+          status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
+          description: string;
+          reference_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          wallet_id: string;
+          worker_id: string;
+          job_id?: string | null;
+          transaction_type: 'JOB_PAYOUT' | 'COMMISSION_DEDUCTION' | 'PENALTY_DEDUCTION' | 'WITHDRAWAL' | 'REFUND' | 'ADJUSTMENT';
+          amount_inr: number;
+          balance_after_inr: number;
+          status?: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
+          description: string;
+          reference_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
+          description?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'wallet_transactions_wallet_id_fkey';
+            columns: ['wallet_id'];
+            isOneToOne: false;
+            referencedRelation: 'worker_wallets';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'wallet_transactions_worker_id_fkey';
+            columns: ['worker_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      worker_payout_methods: {
+        Row: {
+          id: string;
+          worker_id: string;
+          method_type: 'UPI' | 'BANK_ACCOUNT';
+          account_holder_name: string;
+          upi_id: string | null;
+          bank_name: string | null;
+          account_number_masked: string | null;
+          ifsc_code: string | null;
+          is_primary: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          worker_id: string;
+          method_type: 'UPI' | 'BANK_ACCOUNT';
+          account_holder_name: string;
+          upi_id?: string | null;
+          bank_name?: string | null;
+          account_number_masked?: string | null;
+          ifsc_code?: string | null;
+          is_primary?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          account_holder_name?: string;
+          upi_id?: string | null;
+          bank_name?: string | null;
+          account_number_masked?: string | null;
+          ifsc_code?: string | null;
+          is_primary?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'worker_payout_methods_worker_id_fkey';
+            columns: ['worker_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      withdrawal_requests: {
+        Row: {
+          id: string;
+          worker_id: string;
+          wallet_id: string;
+          amount_inr: number;
+          payout_method_type: 'UPI' | 'BANK_ACCOUNT';
+          payout_details: Json;
+          status: 'PENDING' | 'APPROVED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
+          admin_notes: string | null;
+          payout_reference: string | null;
+          processed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          worker_id: string;
+          wallet_id: string;
+          amount_inr: number;
+          payout_method_type: 'UPI' | 'BANK_ACCOUNT';
+          payout_details?: Json;
+          status?: 'PENDING' | 'APPROVED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
+          admin_notes?: string | null;
+          payout_reference?: string | null;
+          processed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: 'PENDING' | 'APPROVED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
+          admin_notes?: string | null;
+          payout_reference?: string | null;
+          processed_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'withdrawal_requests_worker_id_fkey';
+            columns: ['worker_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      job_payments: {
+        Row: {
+          id: string;
+          job_id: string;
+          customer_id: string;
+          worker_id: string;
+          gross_amount_inr: number;
+          commission_rate_percent: number;
+          commission_amount_inr: number;
+          worker_net_earning_inr: number;
+          payment_status: 'HELD_IN_ESCROW' | 'PENDING_RELEASE' | 'RELEASED_TO_WALLET' | 'REFUNDED' | 'DISPUTED';
+          released_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          job_id: string;
+          customer_id: string;
+          worker_id: string;
+          gross_amount_inr: number;
+          commission_rate_percent?: number;
+          commission_amount_inr?: number;
+          worker_net_earning_inr: number;
+          payment_status?: 'HELD_IN_ESCROW' | 'PENDING_RELEASE' | 'RELEASED_TO_WALLET' | 'REFUNDED' | 'DISPUTED';
+          released_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          gross_amount_inr?: number;
+          commission_rate_percent?: number;
+          commission_amount_inr?: number;
+          worker_net_earning_inr?: number;
+          payment_status?: 'HELD_IN_ESCROW' | 'PENDING_RELEASE' | 'RELEASED_TO_WALLET' | 'REFUNDED' | 'DISPUTED';
+          released_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'job_payments_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: true;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      worker_notifications: {
+        Row: {
+          id: string;
+          worker_id: string;
+          type: 'NEW_OFFER' | 'OFFER_ACCEPTED' | 'OFFER_REJECTED' | 'BOOKING_CANCELLED' | 'UPCOMING_REMINDER' | 'COMPLETION_CONFIRMED' | 'PAYMENT_CREDITED' | 'WITHDRAWAL_STATUS' | 'SYSTEM';
+          title: string;
+          message: string;
+          job_id: string | null;
+          is_read: boolean;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          worker_id: string;
+          type: 'NEW_OFFER' | 'OFFER_ACCEPTED' | 'OFFER_REJECTED' | 'BOOKING_CANCELLED' | 'UPCOMING_REMINDER' | 'COMPLETION_CONFIRMED' | 'PAYMENT_CREDITED' | 'WITHDRAWAL_STATUS' | 'SYSTEM';
+          title: string;
+          message: string;
+          job_id?: string | null;
+          is_read?: boolean;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          is_read?: boolean;
+          metadata?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'worker_notifications_worker_id_fkey';
+            columns: ['worker_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -598,6 +884,37 @@ export interface Database {
           p_job_id: string;
           p_bid_id: string;
           p_customer_id: string;
+        };
+        Returns: Json;
+      };
+      get_or_create_worker_wallet: {
+        Args: {
+          p_worker_id: string;
+        };
+        Returns: Database['public']['Tables']['worker_wallets']['Row'];
+      };
+      credit_job_earnings_to_wallet: {
+        Args: {
+          p_job_id: string;
+          p_commission_percent?: number | null;
+        };
+        Returns: Json;
+      };
+      request_wallet_withdrawal: {
+        Args: {
+          p_worker_id: string;
+          p_amount: number;
+          p_method_type: string;
+          p_details: Json;
+        };
+        Returns: Json;
+      };
+      process_withdrawal_decision: {
+        Args: {
+          p_request_id: string;
+          p_action: string;
+          p_admin_notes?: string | null;
+          p_payout_ref?: string | null;
         };
         Returns: Json;
       };

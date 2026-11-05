@@ -2,10 +2,11 @@
  * Automated Unit Tests: OAuth Callback Role Preservation & Redirection
  * Verifies zero-trust handling:
  * 1. Existing customer profile role is never overwritten by query param manipulation.
- * 2. Existing worker profile role is never overwritten.
- * 3. Existing admin role is never downgraded or overwritten.
- * 4. New user registration prevents unauthorized privilege escalation to admin.
- * 5. Destination redirection respects role boundaries and blocks open redirects.
+ * 2. When a Customer attempts to sign in as a Worker, explicit account-role mismatch is flagged and routes to /login (not /post-job).
+ * 3. Existing worker profile role is never overwritten and always routes to /dashboard?role=worker.
+ * 4. Existing admin role is never downgraded or overwritten.
+ * 5. New user registration prevents unauthorized privilege escalation to admin.
+ * 6. Destination redirection respects role boundaries and blocks open redirects.
  */
 
 import { describe, it } from 'node:test';
@@ -13,16 +14,23 @@ import assert from 'node:assert/strict';
 import { resolveOAuthRoleAndDestination } from '@/lib/auth/oauth';
 
 describe('OAuth Callback Role Preservation & Redirection', () => {
-  it('should NOT overwrite existing customer role when role=worker is requested in query', () => {
+  it('should flag account role mismatch and redirect to /login when existing customer tries to sign in as worker', () => {
     const result = resolveOAuthRoleAndDestination({
       existingProfileRole: 'customer',
-      requestedRoleParam: 'worker', // Untrusted query param trying to claim worker
+      requestedRoleParam: 'worker', // User clicked Worker tab, but account is customer
       redirectParam: '/dashboard?role=worker',
     });
 
     assert.equal(result.finalRole, 'customer', 'Customer role must be preserved');
     assert.equal(result.isNewUser, false);
-    assert.equal(result.destination, '/post-job', 'Customer must not be redirected to worker view or dashboard');
+    assert.equal(result.roleMismatch, true, 'Role mismatch must be explicitly flagged');
+    assert.equal(result.expectedRole, 'worker');
+    assert.equal(result.actualRole, 'customer');
+    assert.equal(
+      result.destination,
+      '/login?error=account_role_mismatch&expected=worker&actual=customer',
+      'Must redirect to /login with explanatory error instead of silently sending to /post-job'
+    );
   });
 
   it('should NOT overwrite existing worker role when role=customer is requested', () => {
@@ -34,6 +42,7 @@ describe('OAuth Callback Role Preservation & Redirection', () => {
 
     assert.equal(result.finalRole, 'worker', 'Worker role must be preserved');
     assert.equal(result.isNewUser, false);
+    assert.equal(result.roleMismatch, false);
     assert.equal(result.destination, '/dashboard', 'Requested safe internal dashboard path honored for worker');
   });
 

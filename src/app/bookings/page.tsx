@@ -124,8 +124,35 @@ function BookingHistoryContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
 
-  // Verify authentication
+  // Verify authentication and role guard (workers must not access customer bookings)
   useEffect(() => {
+    let isCancelled = false;
+
+    const checkRoleAndSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        const json = await res.json();
+
+        if (isCancelled) return;
+
+        if (json.success && json.data?.authenticated) {
+          if (json.data.role === 'worker') {
+            router.replace('/worker/dashboard');
+            return;
+          }
+          if (json.data.user) {
+            setSessionUser({ id: json.data.user.id, email: json.data.user.email });
+          }
+        }
+      } catch {
+        // Fallback
+      } finally {
+        if (!isCancelled) setLoadingSession(false);
+      }
+    };
+
+    checkRoleAndSession();
+
     const supabase = getSupabaseClient();
     if (!supabase) {
       setLoadingSession(false);
@@ -133,27 +160,21 @@ function BookingHistoryContent() {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setSessionUser({ id: session.user.id, email: session.user.email });
-      } else {
-        setSessionUser(null);
-      }
-      setLoadingSession(false);
-    });
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        setSessionUser({ id: session.user.id, email: session.user.email });
+        checkRoleAndSession();
       } else {
         setSessionUser(null);
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      isCancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   // Fetch bookings for authenticated customer
   const fetchBookings = useCallback(async () => {

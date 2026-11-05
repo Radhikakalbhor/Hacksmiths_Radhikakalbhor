@@ -2,6 +2,8 @@
  * OAuth Callback Handler
  * Securely exchanges the authorization code for a session cookie via @supabase/ssr,
  * safely verifies or initializes the user profile in public.profiles,
+ * ensures base worker_profiles records exist for workers,
+ * detects explicit account role mismatches without privilege escalation,
  * and redirects to the appropriate dashboard without privilege escalation.
  */
 
@@ -10,6 +12,7 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { EmailOtpType } from '@supabase/supabase-js';
 import { resolveOAuthRoleAndDestination } from '@/lib/auth/oauth';
+import { UserRole } from '@/types/database.types';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -20,6 +23,8 @@ export async function GET(request: NextRequest) {
   const redirectParam = requestUrl.searchParams.get('redirect');
   const authError = requestUrl.searchParams.get('error');
   const authErrorDescription = requestUrl.searchParams.get('error_description');
+
+  console.log(`[OAuth Callback] Initiation: requestedRole=${rawRole}, hasCode=${!!code}, hasTokenHash=${!!tokenHash}`);
 
   // Handle OAuth provider errors (e.g. user cancelled Google consent)
   if (authError) {
@@ -61,24 +66,58 @@ export async function GET(request: NextRequest) {
   }
 
   const user = sessionData.user;
+  const userMasked = user.id.slice(0, 8) + '...';
 
   // 2. Query existing profile to prevent role overwriting or privilege escalation
-  const { data: existingProfile, error: profileQueryError } = await supabase
+  // Includes adminClient fallback to prevent false negatives from RLS race conditions
+  let existingProfile: { id: string; role: UserRole; verification_status?: string } | null = null;
+
+  const { data: userProfile, error: profileQueryError } = await supabase
     .from('profiles')
     .select('id, role, verification_status')
     .eq('id', user.id)
     .maybeSingle();
 
-  if (profileQueryError) {
-    console.warn('[OAuth Callback] Profile lookup notice:', profileQueryError.message);
+  if (userProfile && !profileQueryError) {
+    existingProfile = userProfile as { id: string; role: UserRole; verification_status?: string };
+  } else {
+    const adminClient = getSupabaseAdminClient();
+    if (adminClient) {
+      const { data: adminProf } = await adminClient
+        .from('profiles')
+        .select('id, role, verification_status')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (adminProf) {
+        existingProfile = adminProf as { id: string; role: UserRole; verification_status?: string };
+      }
+    }
   }
 
+  console.log(`[OAuth Callback] User: ${userMasked}, existingProfileRole=${existingProfile?.role || 'none (new user)'}`);
+
   // Resolve role and destination with security invariants
-  const { finalRole, isNewUser, destination } = resolveOAuthRoleAndDestination({
-    existingProfileRole: existingProfile?.role,
-    requestedRoleParam: rawRole,
-    redirectParam,
-  });
+  const { finalRole, isNewUser, destination, roleMismatch, expectedRole, actualRole } =
+    resolveOAuthRoleAndDestination({
+      existingProfileRole: existingProfile?.role,
+      requestedRoleParam: rawRole,
+      redirectParam,
+    });
+
+  // Handle explicit Account-Role Mismatch:
+  // If the user selected Worker login, but their existing account is a Customer,
+  // do NOT silently send them to /post-job. Inform them via /login with clear instructions.
+  if (roleMismatch) {
+    console.warn(`[OAuth Callback] Role mismatch for ${userMasked}: requested=${expectedRole}, actual=${actualRole}. Redirecting to /login.`);
+    const errorUrl = new URL('/login', request.url);
+    errorUrl.searchParams.set('error', 'account_role_mismatch');
+    errorUrl.searchParams.set('role', expectedRole || 'worker');
+    errorUrl.searchParams.set('actualRole', actualRole || 'customer');
+    if (user.email) {
+      errorUrl.searchParams.set('email', user.email);
+    }
+    return NextResponse.redirect(errorUrl);
+  }
 
   // 3. New user registration
   if (isNewUser) {
@@ -125,36 +164,32 @@ export async function GET(request: NextRequest) {
         });
       }
     }
+  }
 
-    // If new user registered as a worker, initialize their base worker profile
-    if (finalRole === 'worker') {
-      const { error: workerInsertError } = await supabase.from('worker_profiles').insert({
+  // 4. Ensure worker profile exists for any confirmed worker account (auto-healing incomplete onboarding)
+  if (finalRole === 'worker') {
+    const adminClient = getSupabaseAdminClient();
+    const client = adminClient || supabase;
+    const { data: existingWp } = await client
+      .from('worker_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!existingWp) {
+      console.log(`[OAuth Callback] Initializing worker_profiles record for worker ${userMasked}`);
+      await client.from('worker_profiles').insert({
         user_id: user.id,
         primary_category: 'plumbing',
         skills: ['general'],
-        bio: 'Partner registered via Google Sign-In',
+        bio: 'Partner profile registered via Sahayak Auth',
         years_experience: 1,
         is_available: true,
         is_publicly_visible: false,
       });
-
-      if (workerInsertError) {
-        const adminClient = getSupabaseAdminClient();
-        if (adminClient) {
-          await adminClient.from('worker_profiles').insert({
-            user_id: user.id,
-            primary_category: 'plumbing',
-            skills: ['general'],
-            bio: 'Partner registered via Google Sign-In',
-            years_experience: 1,
-            is_available: true,
-            is_publicly_visible: false,
-          });
-        }
-      }
     }
   }
 
+  console.log(`[OAuth Callback] Complete. Redirecting ${userMasked} (role: ${finalRole}) to: ${destination}`);
   return NextResponse.redirect(new URL(destination, request.url));
 }
-

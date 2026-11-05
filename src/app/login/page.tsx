@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { SERVICE_CATEGORIES } from '@/lib/config/constants';
+import { getDestinationForRole } from '@/lib/auth/roles';
 import {
   validateIndianPhoneNumber,
   validateEmail,
@@ -30,16 +31,16 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialRole = searchParams.get('role') === 'worker' ? 'worker' : 'customer';
-  const defaultRedirect = initialRole === 'worker' ? '/dashboard?role=worker' : '/post-job';
   const rawRedirect = searchParams.get('redirect');
-  const redirectTo =
-    rawRedirect === '/dashboard' && initialRole !== 'worker'
-      ? '/post-job'
-      : rawRedirect || defaultRedirect;
 
   const [role, setRole] = useState<'customer' | 'worker'>(initialRole);
   const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp');
   const [isRegisteringWorker, setIsRegisteringWorker] = useState(initialRole === 'worker');
+
+  // Authoritative role-bounded destination router
+  const computeDestination = (targetRole: 'customer' | 'worker') => {
+    return getDestinationForRole(targetRole, rawRedirect);
+  };
 
   // Input states
   const [email, setEmail] = useState('');
@@ -61,9 +62,19 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   // Catch OAuth callback error query params directly in initial state
   const rawUrlError = searchParams.get('error');
-  const [errorMsg, setErrorMsg] = useState<string | null>(
-    rawUrlError ? decodeURIComponent(rawUrlError) : null
-  );
+  const errorEmail = searchParams.get('email');
+  const errorActualRole = searchParams.get('actualRole');
+
+  const formatInitialError = (raw: string | null) => {
+    if (!raw) return null;
+    if (raw === 'account_role_mismatch') {
+      const emailDisplay = errorEmail ? ` (${errorEmail})` : '';
+      return `Account Role Mismatch: This Google account${emailDisplay} is registered in Sahayak as a Customer. To access the Worker / Partner Dashboard, please sign in with your registered Partner account, or register a new partner profile.`;
+    }
+    return decodeURIComponent(raw);
+  };
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(formatInitialError(rawUrlError));
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
@@ -116,13 +127,10 @@ function LoginContent() {
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const defaultTarget = role === 'worker' ? '/dashboard?role=worker' : '/post-job';
-      const rawTarget = searchParams.get('redirect');
-      const targetRedirect =
-        role === 'customer' && (rawTarget === '/dashboard' || !rawTarget)
-          ? '/post-job'
-          : rawTarget || defaultTarget;
+      const targetRedirect = computeDestination(role);
       const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
+
+      console.log(`[Google OAuth Initiation] selectedRole=${role}, targetRedirect=${targetRedirect}`);
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -178,12 +186,7 @@ function LoginContent() {
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const defaultTarget = role === 'worker' ? '/dashboard?role=worker' : '/post-job';
-      const rawTarget = searchParams.get('redirect');
-      const targetRedirect =
-        role === 'customer' && (rawTarget === '/dashboard' || !rawTarget)
-          ? '/post-job'
-          : rawTarget || defaultTarget;
+      const targetRedirect = computeDestination(role);
       const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
 
       const { error } = await supabase.auth.signInWithOtp({
@@ -191,15 +194,19 @@ function LoginContent() {
         options: {
           shouldCreateUser: true,
           emailRedirectTo: callbackUrl,
-          data: isRegisteringWorker
+          data: role === 'worker'
             ? {
-                full_name: fullName.trim(),
-                phone: phoneNumber.trim(),
                 role: 'worker',
-                primary_category: primaryCategory,
-                years_experience: parseInt(yearsExperience, 10) || 0,
-                bio: bio.trim(),
-                verification_status: 'unverified',
+                ...(isRegisteringWorker
+                  ? {
+                      full_name: fullName.trim(),
+                      phone: phoneNumber.trim(),
+                      primary_category: primaryCategory,
+                      years_experience: parseInt(yearsExperience, 10) || 0,
+                      bio: bio.trim(),
+                      verification_status: 'unverified',
+                    }
+                  : {}),
               }
             : {
                 role: 'customer',
@@ -356,10 +363,7 @@ function LoginContent() {
 
       setSuccessMsg('Authentication verified successfully! Establishing session and redirecting...');
 
-      const targetDestination =
-        finalRole === 'worker'
-          ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
-          : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
+      const targetDestination = computeDestination(finalRole);
 
       setTimeout(() => {
         router.push(targetDestination);
@@ -417,10 +421,7 @@ function LoginContent() {
           setErrorMsg(error.message);
         } else if (data.session) {
           setSuccessMsg('Account created and logged in! Redirecting...');
-          const targetDestination =
-            (isRegisteringWorker || role === 'worker')
-              ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
-              : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
+          const targetDestination = computeDestination(isRegisteringWorker || role === 'worker' ? 'worker' : 'customer');
           setTimeout(() => {
             router.push(targetDestination);
             router.refresh();
@@ -439,10 +440,7 @@ function LoginContent() {
           setErrorMsg(error.message);
         } else if (data.session) {
           setSuccessMsg('Signed in successfully! Redirecting...');
-          const targetDestination =
-            (isRegisteringWorker || role === 'worker')
-              ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
-              : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
+          const targetDestination = computeDestination(isRegisteringWorker || role === 'worker' ? 'worker' : 'customer');
           setTimeout(() => {
             router.push(targetDestination);
             router.refresh();
@@ -498,10 +496,7 @@ function LoginContent() {
               size="sm"
               className="w-full text-xs"
               onClick={() => {
-                const target =
-                  role === 'worker'
-                    ? (redirectTo && redirectTo !== '/dashboard' ? redirectTo : '/dashboard?role=worker')
-                    : (redirectTo && redirectTo !== '/dashboard' && !redirectTo.startsWith('/dashboard?') ? redirectTo : '/post-job');
+                const target = computeDestination(role);
                 router.push(target);
               }}
             >

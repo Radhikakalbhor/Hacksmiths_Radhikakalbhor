@@ -59,7 +59,7 @@ describe('Customer Simplified Flow & Worker Preservation', () => {
       assert.equal(result.destination, '/post-job');
     });
 
-    it('redirects customer to /post-job if malicious worker role param is requested in query', () => {
+    it('blocks customer from accessing worker dashboard and redirects to /login with account role mismatch error', () => {
       const result = resolveOAuthRoleAndDestination({
         existingProfileRole: 'customer',
         requestedRoleParam: 'worker',
@@ -67,7 +67,12 @@ describe('Customer Simplified Flow & Worker Preservation', () => {
       });
 
       assert.equal(result.finalRole, 'customer');
-      assert.equal(result.destination, '/post-job', 'Customer cannot be routed to worker dashboard');
+      assert.equal(result.roleMismatch, true);
+      assert.equal(
+        result.destination,
+        '/login?error=account_role_mismatch&expected=worker&actual=customer',
+        'Customer cannot be routed to worker dashboard and must be informed of role mismatch'
+      );
     });
 
     it('honors valid non-dashboard customer redirect targets (e.g. /bookings)', () => {

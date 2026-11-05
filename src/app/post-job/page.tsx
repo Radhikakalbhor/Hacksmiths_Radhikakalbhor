@@ -315,59 +315,25 @@ function PostJobForm() {
 
     const checkAuth = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          if (!isCancelled) setAuthState('signed_out');
+        const res = await fetch('/api/auth/me');
+        const json = await res.json();
+        if (isCancelled) return;
+
+        if (!json.success || !json.data?.authenticated || !json.data?.user) {
+          setAuthState('signed_out');
           return;
         }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, role, full_name')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (isCancelled) return;
-
-        if (profile) {
-          if (profile.role === 'worker') {
-            setAuthState('worker');
-          } else {
-            setAuthState('customer');
-            setCustomerName(profile.full_name || 'Customer');
-          }
-        } else {
-          // If profile is not yet in public.profiles, check user metadata role
-          const metadataRole = user.user_metadata?.role;
-          if (metadataRole === 'worker') {
-            setAuthState('worker');
-          } else {
-            setAuthState('customer');
-            const name =
-              user.user_metadata?.full_name ||
-              user.user_metadata?.name ||
-              user.email?.split('@')[0] ||
-              'Customer';
-            setCustomerName(name);
-
-            // Client-side auto-provisioning attempt
-            supabase
-              .from('profiles')
-              .upsert(
-                {
-                  id: user.id,
-                  email: user.email || null,
-                  phone: user.phone || `user_${user.id.replace(/-/g, '').slice(0, 10)}`,
-                  full_name: name,
-                  role: 'customer',
-                  verification_status: 'unverified',
-                  primary_city: 'Delhi NCR',
-                },
-                { onConflict: 'id', ignoreDuplicates: true }
-              )
-              .then(() => {}, () => {});
-          }
+        const role = json.data.role;
+        if (role === 'worker' || role === 'admin') {
+          // Workers and admins must NEVER access customer job posting
+          setAuthState('worker');
+          router.replace('/worker/dashboard');
+          return;
         }
+
+        setAuthState('customer');
+        setCustomerName(json.data.user.fullName || 'Customer');
       } catch (err) {
         console.warn('Auth check notice:', err);
         if (!isCancelled) setAuthState('signed_out');
