@@ -98,18 +98,18 @@ function getBaselineValidPayload(): SeedPayload {
     demoCustomer: {
       email: 'demo-customer@sahayak.demo.internal',
       phone: '+919999000099',
-      fullName: '[DEMO] Ananya Deshmukh',
+      fullName: 'Ananya Deshmukh',
       role: 'customer',
       city: 'Mumbai',
     },
     demoWorkers: [
       {
-        email: 'ramesh-plumber@sahayak.demo.internal',
+        email: 'aarav-plumber@sahayak.demo.internal',
         phone: '+919999000001',
-        fullName: '[DEMO] Ramesh Kumar',
+        fullName: 'Aarav Sharma',
         primaryCategory: 'plumbing',
         skills: ['Pipe Fitting', 'Tap Repair'],
-        bio: '[DEMO] Master plumber in Bandra.',
+        bio: 'Master plumber with 8+ years experience in Bandra. (Fictional profile for demonstration only).',
         yearsExperience: 8,
         serviceRadiusKm: 12.0,
         hourlyRateInr: 350.0,
@@ -168,13 +168,13 @@ describe('Demo Seed Preflight Validation & Historical Failure Regressions', () =
   // Historical Failure 1: worker_profiles_primary_category_check
   it('catches invalid worker category violating worker_profiles_primary_category_check', () => {
     const payload = getBaselineValidPayload();
-    payload.demoWorkers[0].primaryCategory = 'maid'; // Invalid legacy category
+    payload.demoWorkers[0].primaryCategory = 'invalid_category'; // Invalid category
 
     const result = validateSeedPayload(payload);
     assert.equal(result.valid, false);
     assert.ok(
-      result.errors.some((e) => e.includes("Invalid primary_category 'maid'")),
-      `Expected error about primary_category 'maid', got: ${result.errors.join('; ')}`
+      result.errors.some((e) => e.includes("Invalid primary_category 'invalid_category'")),
+      `Expected error about primary_category 'invalid_category', got: ${result.errors.join('; ')}`
     );
   });
 
@@ -227,12 +227,12 @@ describe('Demo Seed Preflight Validation & Historical Failure Regressions', () =
   // Historical Failure 4: price_benchmarks_category_check
   it('catches invalid benchmark category violating price_benchmarks_category_check', () => {
     const payload = getBaselineValidPayload();
-    payload.priceBenchmarks[0].category = 'maid'; // Invalid category
+    payload.priceBenchmarks[0].category = 'invalid_category'; // Invalid category
 
     const result = validateSeedPayload(payload);
     assert.equal(result.valid, false);
     assert.ok(
-      result.errors.some((e) => e.includes("Invalid benchmark category 'maid'")),
+      result.errors.some((e) => e.includes("Invalid benchmark category 'invalid_category'")),
       `Expected benchmark category error, got: ${result.errors.join('; ')}`
     );
   });
@@ -346,6 +346,8 @@ describe('Demo Seed Preflight Validation & Historical Failure Regressions', () =
       'painting',
       'appliance_repair',
       'cooking',
+      'maid',
+      'other',
     ]);
     assert.deepEqual(PERMITTED_INITIAL_JOB_STATUSES, ['posted', 'POSTED']);
     assert.deepEqual(PERMITTED_INITIAL_BID_STATUSES, ['submitted', 'PENDING', 'pending']);

@@ -6,6 +6,7 @@
 import { NextRequest } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { WorkersService } from '@/lib/services/workers.service';
+import { PricingService } from '@/lib/services/pricing.service';
 import { apiSuccess, apiError } from '@/lib/api/response';
 
 export async function GET(request: NextRequest) {
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
     const radiusStr = searchParams.get('radius');
     const category = searchParams.get('category');
     const limitStr = searchParams.get('limit');
+    const jobId = searchParams.get('jobId');
 
     if (!latStr || !lngStr) {
       return apiError(
@@ -72,8 +74,51 @@ export async function GET(request: NextRequest) {
       maxResults: limit,
     });
 
+    // If jobId is provided, retrieve the job and existing bids to calculate exact quotes
+    let targetJob: {
+      id?: string | null;
+      category?: string | null;
+      title?: string | null;
+      description?: string | null;
+      urgency?: string | null;
+      estimated_min_price_inr?: number | null;
+      estimated_max_price_inr?: number | null;
+      estimated_budget_inr?: number | null;
+      city?: string | null;
+    } | null = null;
+    const jobBidsMap = new Map<string, number>();
+
+    if (jobId) {
+      const { data: jobRow } = await supabase
+        .from('jobs')
+        .select('id, category, title, description, urgency, city, estimated_min_price_inr, estimated_max_price_inr, estimated_budget_inr')
+        .eq('id', jobId)
+        .maybeSingle();
+
+      if (jobRow) {
+        targetJob = jobRow;
+        const { data: existingBids } = await supabase
+          .from('bids')
+          .select('worker_id, offered_amount_inr, status')
+          .eq('job_id', jobId);
+
+        if (existingBids && Array.isArray(existingBids)) {
+          for (const b of existingBids) {
+            jobBidsMap.set(b.worker_id, b.offered_amount_inr);
+          }
+        }
+      }
+    }
+
     // Query real persisted reviews for each returned worker
-    let enrichedWorkers = workers as Array<typeof workers[number] & { review_count: number; average_rating: number | null }>;
+    let enrichedWorkers = workers as Array<typeof workers[number] & {
+      review_count: number;
+      average_rating: number | null;
+      quote_inr?: number | null;
+      fair_price_min_inr?: number | null;
+      fair_price_max_inr?: number | null;
+    }>;
+
     if (workers.length > 0) {
       const allWorkerIds = Array.from(new Set(workers.map((w) => w.worker_id).filter(Boolean)));
 
@@ -102,10 +147,65 @@ export async function GET(request: NextRequest) {
 
       enrichedWorkers = workers.map((w) => {
         const stats = reviewStatsMap.get(w.worker_id);
+        const avgRating = stats ? stats.avgRating : null;
+        const reviewCount = stats ? stats.count : 0;
+
+        let quoteInr: number | null = null;
+        let fairMin: number | null = null;
+        let fairMax: number | null = null;
+
+        if (targetJob) {
+          const fairRange = PricingService.getJobFairPriceRange(targetJob);
+          fairMin = fairRange.minPriceInr;
+          fairMax = fairRange.maxPriceInr;
+
+          const existingBid = jobBidsMap.get(w.worker_id);
+          const quoteResult = PricingService.calculateWorkerQuoteForJob(
+            {
+              worker_id: w.worker_id,
+              full_name: w.full_name,
+              years_experience: w.years_experience,
+              reputation_score: w.reputation_score,
+              average_rating: avgRating,
+              distance_meters: w.distance_meters,
+              hourly_rate_inr: w.hourly_rate_inr,
+              fixed_rate_estimate_inr: w.fixed_rate_estimate_inr,
+              existing_bid_inr: existingBid,
+            },
+            targetJob
+          );
+          quoteInr = quoteResult.quoteInr;
+        } else if (category) {
+          const genericJob = {
+            category,
+            title: `${category} Service`,
+            urgency: 'standard',
+          };
+          const quoteResult = PricingService.calculateWorkerQuoteForJob(
+            {
+              worker_id: w.worker_id,
+              full_name: w.full_name,
+              years_experience: w.years_experience,
+              reputation_score: w.reputation_score,
+              average_rating: avgRating,
+              distance_meters: w.distance_meters,
+              hourly_rate_inr: w.hourly_rate_inr,
+              fixed_rate_estimate_inr: w.fixed_rate_estimate_inr,
+            },
+            genericJob
+          );
+          quoteInr = quoteResult.quoteInr;
+          fairMin = quoteResult.minPriceInr;
+          fairMax = quoteResult.maxPriceInr;
+        }
+
         return {
           ...w,
-          review_count: stats ? stats.count : 0,
-          average_rating: stats ? stats.avgRating : null,
+          review_count: reviewCount,
+          average_rating: avgRating,
+          quote_inr: quoteInr,
+          fair_price_min_inr: fairMin,
+          fair_price_max_inr: fairMax,
         };
       });
     }

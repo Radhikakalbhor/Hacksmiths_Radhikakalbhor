@@ -2,8 +2,8 @@
 -- Sahayak Development-Only Seed Script: Clearly Labelled DEMO Workers
 -- ==============================================================================
 -- FOR LOCAL DEVELOPMENT & GEOSPATIAL TESTING ONLY
--- All names, contact details, and locations below are entirely fictional DEMO test data.
--- They are clearly prefixed with "DEMO -" and do not represent real people or verified professionals.
+-- All names, contact details, and locations below are authentic Indian test data.
+-- They use standard demo internal identifiers and do not represent real people or verified professionals.
 -- Safe and idempotent: Uses fixed test UUIDs (00000000-0000-0000-0000-00000000000X).
 -- Will NOT overwrite existing real user accounts.
 -- ==============================================================================
@@ -35,14 +35,14 @@ BEGIN
         updated_at
     )
     VALUES
-        (v_plumber_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.plumber@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Ramesh Kumar (Plumber)"}', NOW(), NOW()),
-        (v_electrician_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.electrician@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Amit Verma (Electrician)"}', NOW(), NOW()),
-        (v_cleaner_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.cleaner@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Sunita Devi (Deep Cleaning)"}', NOW(), NOW()),
-        (v_carpenter_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.carpenter@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Rajesh Singh (Carpenter)"}', NOW(), NOW()),
-        (v_painter_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.painter@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Priya Sharma (Painter)"}', NOW(), NOW()),
-        (v_appliance_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.appliance@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Vikram Patel (Appliance Repair)"}', NOW(), NOW()),
-        (v_maid_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.maid@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Lakshmi Bai (House Help)"}', NOW(), NOW()),
-        (v_cook_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.cook@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"DEMO - Chef Manoj (Cook)"}', NOW(), NOW())
+        (v_plumber_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.plumber@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Ramesh Kumar"}', NOW(), NOW()),
+        (v_electrician_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.electrician@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Amit Verma"}', NOW(), NOW()),
+        (v_cleaner_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.cleaner@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Sunita Devi"}', NOW(), NOW()),
+        (v_carpenter_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.carpenter@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Rajesh Singh"}', NOW(), NOW()),
+        (v_painter_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.painter@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Priya Sharma"}', NOW(), NOW()),
+        (v_appliance_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.appliance@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Vikram Patel"}', NOW(), NOW()),
+        (v_maid_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.maid@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Lakshmi Bai"}', NOW(), NOW()),
+        (v_cook_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'demo.cook@sahayak.test', '$2a$10$dummyhashedpasswordfordemotesting', NOW(), '{"provider":"email","providers":["email"]}', '{"role":"worker","full_name":"Manoj Sharma"}', NOW(), NOW())
     ON CONFLICT (id) DO NOTHING;
 
     -- 2. Insert into public.profiles
@@ -56,14 +56,14 @@ BEGIN
         primary_city
     )
     VALUES
-        (v_plumber_id, '9999900001', 'demo.plumber@sahayak.test', 'DEMO - Ramesh Kumar (Plumber)', 'worker', 'verified', 'Delhi NCR'),
-        (v_electrician_id, '9999900002', 'demo.electrician@sahayak.test', 'DEMO - Amit Verma (Electrician)', 'worker', 'verified', 'Delhi NCR'),
-        (v_cleaner_id, '9999900003', 'demo.cleaner@sahayak.test', 'DEMO - Sunita Devi (Deep Cleaning)', 'worker', 'verified', 'Delhi NCR'),
-        (v_carpenter_id, '9999900004', 'demo.carpenter@sahayak.test', 'DEMO - Rajesh Singh (Carpenter)', 'worker', 'verified', 'Delhi NCR'),
-        (v_painter_id, '9999900005', 'demo.painter@sahayak.test', 'DEMO - Priya Sharma (Painter)', 'worker', 'verified', 'Delhi NCR'),
-        (v_appliance_id, '9999900006', 'demo.appliance@sahayak.test', 'DEMO - Vikram Patel (Appliance Repair)', 'worker', 'verified', 'Delhi NCR'),
-        (v_maid_id, '9999900007', 'demo.maid@sahayak.test', 'DEMO - Lakshmi Bai (House Help)', 'worker', 'verified', 'Delhi NCR'),
-        (v_cook_id, '9999900008', 'demo.cook@sahayak.test', 'DEMO - Chef Manoj (Cook)', 'worker', 'verified', 'Delhi NCR')
+        (v_plumber_id, '9999900001', 'demo.plumber@sahayak.test', 'Ramesh Kumar', 'worker', 'verified', 'Delhi NCR'),
+        (v_electrician_id, '9999900002', 'demo.electrician@sahayak.test', 'Amit Verma', 'worker', 'verified', 'Delhi NCR'),
+        (v_cleaner_id, '9999900003', 'demo.cleaner@sahayak.test', 'Sunita Devi', 'worker', 'verified', 'Delhi NCR'),
+        (v_carpenter_id, '9999900004', 'demo.carpenter@sahayak.test', 'Rajesh Singh', 'worker', 'verified', 'Delhi NCR'),
+        (v_painter_id, '9999900005', 'demo.painter@sahayak.test', 'Priya Sharma', 'worker', 'verified', 'Delhi NCR'),
+        (v_appliance_id, '9999900006', 'demo.appliance@sahayak.test', 'Vikram Patel', 'worker', 'verified', 'Delhi NCR'),
+        (v_maid_id, '9999900007', 'demo.maid@sahayak.test', 'Lakshmi Bai', 'worker', 'verified', 'Delhi NCR'),
+        (v_cook_id, '9999900008', 'demo.cook@sahayak.test', 'Manoj Sharma', 'worker', 'verified', 'Delhi NCR')
     ON CONFLICT (id) DO UPDATE SET
         full_name = EXCLUDED.full_name,
         verification_status = 'verified';

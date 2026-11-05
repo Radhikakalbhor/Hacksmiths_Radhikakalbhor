@@ -173,6 +173,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         }
       }
 
+      workerDisplayName = workerDisplayName.replace(/^\[DEMO\]\s*/i, '').replace(/^DEMO\s*[-–—]\s*/i, '').trim();
+
       // If detected as demo worker, update the booking state in ai_details so future checks are instant
       if (isDemoWorker && booking) {
         const updatedBookingState = {

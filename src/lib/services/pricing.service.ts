@@ -618,4 +618,168 @@ export class PricingService {
       maxPriceInr: range.maxPriceInr,
     };
   }
+
+  /**
+   * Generates an individual, realistic, and stable service quote for a worker on a specific job.
+   * Ensures varied bids across multiple workers within the job's calculated fair price range.
+   * Guarantees stability across page refreshes via deterministic hashing.
+   */
+  static calculateWorkerQuoteForJob(
+    worker: {
+      worker_id?: string | null;
+      id?: string | null;
+      user_id?: string | null;
+      full_name?: string | null;
+      years_experience?: number | null;
+      reputation_score?: number | null;
+      average_rating?: number | null;
+      distance_meters?: number | null;
+      hourly_rate_inr?: number | null;
+      fixed_rate_estimate_inr?: number | null;
+      existing_bid_inr?: number | null;
+    },
+    job: {
+      id?: string | null;
+      category?: string | null;
+      title?: string | null;
+      description?: string | null;
+      urgency?: string | null;
+      estimated_min_price_inr?: number | null;
+      estimated_max_price_inr?: number | null;
+      estimated_budget_inr?: number | null;
+      city?: string | null;
+    }
+  ): {
+    quoteInr: number;
+    minPriceInr: number;
+    maxPriceInr: number;
+    isExistingBid: boolean;
+    breakdown: {
+      experienceFactor: number;
+      reputationFactor: number;
+      distanceFactor: number;
+      urgencyFactor: number;
+      baseRatio: number;
+    };
+  } {
+    const fairRange = this.getJobFairPriceRange(job);
+    const minPrice = fairRange.minPriceInr;
+    const maxPrice = fairRange.maxPriceInr;
+    const spread = maxPrice - minPrice;
+
+    // If worker already has an authoritative existing bid within fair range, respect it exactly
+    if (
+      typeof worker.existing_bid_inr === 'number' &&
+      !isNaN(worker.existing_bid_inr) &&
+      worker.existing_bid_inr >= minPrice &&
+      worker.existing_bid_inr <= maxPrice
+    ) {
+      return {
+        quoteInr: Math.round(worker.existing_bid_inr),
+        minPriceInr: minPrice,
+        maxPriceInr: maxPrice,
+        isExistingBid: true,
+        breakdown: {
+          experienceFactor: 0,
+          reputationFactor: 0,
+          distanceFactor: 0,
+          urgencyFactor: 0,
+          baseRatio: spread > 0 ? (worker.existing_bid_inr - minPrice) / spread : 0.5,
+        },
+      };
+    }
+
+    if (spread <= 0) {
+      return {
+        quoteInr: minPrice,
+        minPriceInr: minPrice,
+        maxPriceInr: maxPrice,
+        isExistingBid: false,
+        breakdown: {
+          experienceFactor: 0,
+          reputationFactor: 0,
+          distanceFactor: 0,
+          urgencyFactor: 0,
+          baseRatio: 0,
+        },
+      };
+    }
+
+    // 1. Experience Factor: normalized 1 to 15 years -> [0, 1]
+    const exp = typeof worker.years_experience === 'number' && !isNaN(worker.years_experience)
+      ? worker.years_experience
+      : 5;
+    const experienceFactor = Math.min(1, Math.max(0, (exp - 1) / 14));
+
+    // 2. Reputation / Rating Factor: normalized 4.0 to 5.0 -> [0, 1]
+    const rating = typeof worker.average_rating === 'number' && !isNaN(worker.average_rating) && worker.average_rating > 0
+      ? worker.average_rating
+      : typeof worker.reputation_score === 'number' && !isNaN(worker.reputation_score) && worker.reputation_score > 0
+      ? worker.reputation_score
+      : 4.6;
+    const reputationFactor = Math.min(1, Math.max(0, (rating - 4.0) / 1.0));
+
+    // 3. Distance Factor: normalized 0.5km to 15km -> [0, 1]
+    const distMeters = typeof worker.distance_meters === 'number' && !isNaN(worker.distance_meters)
+      ? worker.distance_meters
+      : 2500;
+    const distKm = distMeters / 1000;
+    const distanceFactor = Math.min(1, Math.max(0, (distKm - 0.5) / 14.5));
+
+    // 4. Urgency Factor
+    const rawUrgency = (job.urgency || '').toLowerCase().trim();
+    const urgencyFactor = rawUrgency === 'emergency' ? 0.8 : rawUrgency === 'same_day' || rawUrgency === 'urgent' ? 0.5 : 0.2;
+
+    // 5. Deterministic Hash Jitter: gives natural variance across workers
+    const workerKey = worker.worker_id || worker.id || worker.user_id || worker.full_name || 'worker';
+    const jobKey = job.id || job.title || 'job';
+    const seedStr = `${jobKey}_${workerKey}`;
+    let hash = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      hash = (hash << 5) - hash + seedStr.charCodeAt(i);
+      hash |= 0;
+    }
+    const hashUnit = (Math.abs(hash) % 1000) / 1000; // [0, 1)
+    const jitter = (hashUnit - 0.5) * 0.24; // [-0.12, +0.12]
+
+    // 6. Weighted composition:
+    // Base floor at 12% above minimum, weighted by experience (26%), rating (24%), distance (14%), urgency (10%), plus jitter
+    let baseRatio = 0.12 + (
+      experienceFactor * 0.26 +
+      reputationFactor * 0.24 +
+      distanceFactor * 0.14 +
+      urgencyFactor * 0.10 +
+      jitter
+    );
+
+    // Clamp ratio strictly to [0.08, 0.92] so quotes naturally span the fair range without hitting the exact boundary
+    baseRatio = Math.min(0.92, Math.max(0.08, baseRatio));
+
+    // 7. Calculate raw quote and round to clean commercial increment (₹10 or ₹5)
+    const rawQuote = minPrice + baseRatio * spread;
+    const roundStep = spread > 250 ? 10 : 5;
+    let roundedQuote = Math.round(rawQuote / roundStep) * roundStep;
+
+    // 8. Strict boundary clamp to fair range
+    if (roundedQuote < minPrice) {
+      roundedQuote = Math.min(maxPrice, Math.ceil(minPrice / roundStep) * roundStep);
+    }
+    if (roundedQuote > maxPrice) {
+      roundedQuote = Math.max(minPrice, Math.floor(maxPrice / roundStep) * roundStep);
+    }
+
+    return {
+      quoteInr: roundedQuote,
+      minPriceInr: minPrice,
+      maxPriceInr: maxPrice,
+      isExistingBid: false,
+      breakdown: {
+        experienceFactor,
+        reputationFactor,
+        distanceFactor,
+        urgencyFactor,
+        baseRatio,
+      },
+    };
+  }
 }

@@ -43,6 +43,7 @@ import {
   ChatMessage,
   calculateEstimatedTravelTimeMinutes,
 } from '@/types/booking';
+import { PricingService } from '@/lib/services/pricing.service';
 
 const CANCELLATION_REASONS = [
   'Estimated wait time is too long',
@@ -95,6 +96,9 @@ interface NearbyWorker {
   distance_meters: number;
   average_rating?: number | null;
   review_count?: number;
+  quote_inr?: number | null;
+  fair_price_min_inr?: number | null;
+  fair_price_max_inr?: number | null;
 }
 
 interface BenchmarkData {
@@ -144,6 +148,39 @@ const BOOKING_STEPS: { stage: BookingStage; label: string; description: string }
   { stage: 'completed', label: 'Completed', description: 'Service completed' },
 ];
 
+interface JobBid {
+  id: string;
+  job_id: string;
+  worker_id: string;
+  offered_amount_inr: number;
+  labor_cost_inr?: number;
+  materials_estimate_inr?: number;
+  visitation_fee_inr?: number;
+  note?: string;
+  status: string;
+  created_at: string;
+  worker?: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+    primary_city?: string;
+  };
+}
+
+function cleanDisplayName(name: string | null | undefined): string {
+  if (!name) return 'Professional Partner';
+  return name.replace(/^\[DEMO\]\s*/i, '').replace(/^DEMO\s*[-–—]\s*/i, '').trim();
+}
+
+function formatWorkerCategory(primaryCategory: string, skills?: string[]): string {
+  if (skills && skills.some((s) => s.toLowerCase().includes('maid') || s.toLowerCase().includes('house help'))) {
+    return 'House Help & Maid';
+  }
+  if (primaryCategory === 'cleaning') return 'Deep Cleaning';
+  if (primaryCategory === 'appliance_repair') return 'Appliance Repair';
+  return primaryCategory.replace(/_/g, ' ');
+}
+
 function JobDiscoveryContent() {
   const params = useParams();
   const router = useRouter();
@@ -151,9 +188,12 @@ function JobDiscoveryContent() {
 
   // Job & Discovery Data
   const [job, setJob] = useState<JobDetails | null>(null);
+  const [bids, setBids] = useState<JobBid[]>([]);
   const [bidsCount, setBidsCount] = useState<number>(0);
   const [loadingJob, setLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
+  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
+  const [bidAcceptError, setBidAcceptError] = useState<string | null>(null);
 
   // Price Benchmark & Savings
   const [benchmark, setBenchmark] = useState<BenchmarkData | null>(null);
@@ -229,7 +269,9 @@ function JobDiscoveryContent() {
 
       const jobData = data.data?.job as JobDetails;
       setJob(jobData);
-      setBidsCount(Array.isArray(data.data?.bids) ? data.data.bids.length : 0);
+      const rawBids = Array.isArray(data.data?.bids) ? (data.data.bids as JobBid[]) : [];
+      setBids(rawBids);
+      setBidsCount(rawBids.length);
 
       if (data.data?.benchmark) {
         setBenchmark(data.data.benchmark);
@@ -290,6 +332,30 @@ function JobDiscoveryContent() {
     }
   };
 
+  // Accept a worker's bid/quote
+  const handleAcceptBid = async (bidId: string) => {
+    if (!jobId || acceptingBidId) return;
+    setAcceptingBidId(bidId);
+    setBidAcceptError(null);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/accept-bid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bidId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBidAcceptError(data.error || 'Failed to accept bid.');
+        return;
+      }
+      await loadJob();
+    } catch (err) {
+      setBidAcceptError(err instanceof Error ? err.message : 'Network error accepting bid.');
+    } finally {
+      setAcceptingBidId(null);
+    }
+  };
+
   useEffect(() => {
     loadJob();
   }, [loadJob]);
@@ -311,6 +377,7 @@ function JobDiscoveryContent() {
           category: job.category,
           radius: searchRadius.toString(),
           limit: '20',
+          jobId: job.id,
         });
 
         const res = await fetch(`/api/workers/nearby?${queryParams.toString()}`);
@@ -389,24 +456,36 @@ function JobDiscoveryContent() {
     return () => clearInterval(timer);
   }, [booking, simulatedCountdown]);
 
+  // Resolve individual worker-specific quote for the current job
+  const getWorkerQuote = (worker: NearbyWorker): number => {
+    if (typeof worker.quote_inr === 'number' && worker.quote_inr > 0) {
+      return worker.quote_inr;
+    }
+    if (!job) return 500;
+    const calc = PricingService.calculateWorkerQuoteForJob(
+      {
+        worker_id: worker.worker_id,
+        full_name: worker.full_name,
+        years_experience: worker.years_experience,
+        reputation_score: worker.reputation_score,
+        average_rating: worker.average_rating,
+        distance_meters: worker.distance_meters,
+        hourly_rate_inr: worker.hourly_rate_inr,
+        fixed_rate_estimate_inr: worker.fixed_rate_estimate_inr,
+      },
+      job
+    );
+    return calc.quoteInr;
+  };
+
   // Initiate Booking Modal
   const handleOpenBookingConfirm = (worker: NearbyWorker) => {
     setActiveWorkerProfile(null);
     setBookingConfirmWorker(worker);
 
-    const minPrice = job?.estimated_min_price_inr || 300;
-    const maxPrice = job?.estimated_max_price_inr || Math.max(minPrice + 100, Math.round(minPrice * 1.5));
-
-    let estimatedAmount =
-      worker.fixed_rate_estimate_inr ||
-      worker.hourly_rate_inr ||
-      job?.estimated_min_price_inr ||
-      minPrice;
-
-    if (estimatedAmount < minPrice) estimatedAmount = minPrice;
-    if (estimatedAmount > maxPrice) estimatedAmount = maxPrice;
-
-    setBookingAgreedPrice(estimatedAmount);
+    // CRITICAL: Always use selected worker's specific quote, never default to minimum price
+    const quote = getWorkerQuote(worker);
+    setBookingAgreedPrice(quote);
     setBookingError(null);
   };
 
@@ -431,7 +510,7 @@ function JobDiscoveryContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workerId: bookingConfirmWorker.worker_id,
-          workerName: bookingConfirmWorker.full_name,
+          workerName: cleanDisplayName(bookingConfirmWorker.full_name),
           offeredPriceInr: bookingAgreedPrice,
           distanceMeters: bookingConfirmWorker.distance_meters,
         }),
@@ -678,7 +757,7 @@ function JobDiscoveryContent() {
         : !isJobCancelled && bidsCount > 0 && !isBidAccepted
         ? ('current' as const)
         : ('pending' as const),
-      subtitle: booking?.workerName ? `Assigned: ${booking.workerName}` : isBidAccepted ? 'Worker Assigned' : 'Awaiting Selection',
+      subtitle: booking?.workerName ? `Assigned: ${cleanDisplayName(booking.workerName)}` : isBidAccepted ? 'Worker Assigned' : 'Awaiting Selection',
     },
     {
       id: 'arrived',
@@ -843,7 +922,7 @@ function JobDiscoveryContent() {
               <p className="text-xs text-[#576563]">
                 {review
                   ? 'Your verified customer feedback recorded for this completed job.'
-                  : `Rate your experience with ${booking?.workerName || 'your assigned professional'}.`}
+                  : `Rate your experience with ${cleanDisplayName(booking?.workerName) || 'your assigned professional'}.`}
               </p>
             </div>
             {review && (
@@ -887,7 +966,7 @@ function JobDiscoveryContent() {
               )}
 
               <p className="text-[10px] text-[#83928E]">
-                ⭐ This verified rating contributes directly to {booking?.workerName || 'the worker'}&apos;s public reputation on Sahayak.
+                ⭐ This verified rating contributes directly to {cleanDisplayName(booking?.workerName) || 'the worker'}&apos;s public reputation on Sahayak.
               </p>
             </div>
           ) : (
@@ -1000,9 +1079,9 @@ function JobDiscoveryContent() {
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black tracking-tight">
                   {booking.stage === 'requested' && 'Finding & Assigning Professional...'}
-                  {booking.stage === 'accepted' && `${booking.workerName} is Confirmed`}
-                  {booking.stage === 'on_the_way' && `${booking.workerName} is On The Way`}
-                  {booking.stage === 'arrived' && `${booking.workerName} Has Arrived!`}
+                  {booking.stage === 'accepted' && `${cleanDisplayName(booking.workerName)} is Confirmed`}
+                  {booking.stage === 'on_the_way' && `${cleanDisplayName(booking.workerName)} is On The Way`}
+                  {booking.stage === 'arrived' && `${cleanDisplayName(booking.workerName)} Has Arrived!`}
                   {booking.stage === 'in_progress' && 'Service Currently In Progress'}
                   {booking.stage === 'completed' && 'Service Successfully Completed'}
                   {booking.stage === 'cancelled' && 'Booking Cancelled'}
@@ -1146,11 +1225,11 @@ function JobDiscoveryContent() {
                     {booking.workerAvatarUrl ? (
                       <img
                         src={booking.workerAvatarUrl}
-                        alt={booking.workerName}
+                        alt={cleanDisplayName(booking.workerName)}
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      booking.workerName
+                      cleanDisplayName(booking.workerName)
                         .split(' ')
                         .map((n) => n[0])
                         .slice(0, 2)
@@ -1158,9 +1237,9 @@ function JobDiscoveryContent() {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-[#152220]">{booking.workerName}</h3>
+                    <h3 className="text-base font-bold text-[#152220]">{cleanDisplayName(booking.workerName)}</h3>
                     <p className="text-xs text-[#217E66] font-semibold capitalize">
-                      {booking.workerCategory} Professional
+                      {formatWorkerCategory(booking.workerCategory)} Professional
                     </p>
                     <div className="flex items-center gap-1 text-amber-600 font-bold text-xs mt-1">
                       <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
@@ -1355,6 +1434,97 @@ function JobDiscoveryContent() {
         </div>
       </div>
 
+      {/* Quotes & Bids Section */}
+      {bids.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              <span>Quotes Received ({bids.length})</span>
+            </h2>
+            <Badge variant="teal">Fair Pricing Policy Compliant</Badge>
+          </div>
+
+          {bidAcceptError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{bidAcceptError}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {bids.map((b) => {
+              const workerName = cleanDisplayName(b.worker?.full_name);
+              const isAccepted = b.status === 'accepted';
+              return (
+                <Card
+                  key={b.id}
+                  className={`p-5 space-y-4 flex flex-col justify-between hover:shadow-md transition-shadow ${
+                    isAccepted ? 'ring-2 ring-[#0D4A52] bg-emerald-50/20' : ''
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-11 h-11 rounded-full bg-[#EBF4F3] border border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-sm shrink-0 overflow-hidden">
+                        {b.worker?.avatar_url ? (
+                          <img
+                            src={b.worker.avatar_url}
+                            alt={workerName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          workerName.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <h4 className="text-sm font-bold text-[#152220] truncate">
+                            {workerName}
+                          </h4>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                            Verified
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#576563] mt-0.5">
+                          {b.worker?.primary_city || 'Mumbai'} • Professional Partner
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2] flex items-center justify-between">
+                      <span className="text-xs text-[#576563]">Offered Quote</span>
+                      <span className="text-base font-extrabold text-[#0D4A52]">
+                        ₹{b.offered_amount_inr}
+                      </span>
+                    </div>
+
+                    {b.note && (
+                      <p className="text-xs text-[#576563] italic line-clamp-2">
+                        &ldquo;{b.note}&rdquo;
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={
+                      isAccepted ||
+                      acceptingBidId !== null ||
+                      (booking !== null && booking.stage !== 'completed' && booking.stage !== 'cancelled')
+                    }
+                    onClick={() => handleAcceptBid(b.id)}
+                    className="w-full text-xs font-bold justify-center bg-[#0D4A52] hover:bg-[#072F35]"
+                  >
+                    {isAccepted ? 'Accepted' : acceptingBidId === b.id ? 'Accepting...' : 'Accept Quote'}
+                  </Button>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Nearby Worker Discovery Section */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -1444,11 +1614,11 @@ function JobDiscoveryContent() {
                         {w.avatar_url ? (
                           <img
                             src={w.avatar_url}
-                            alt={w.full_name}
+                            alt={cleanDisplayName(w.full_name)}
                             className="w-full h-full rounded-full object-cover"
                           />
                         ) : (
-                          w.full_name
+                          cleanDisplayName(w.full_name)
                             .split(' ')
                             .map((n) => n[0])
                             .slice(0, 2)
@@ -1460,7 +1630,7 @@ function JobDiscoveryContent() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
                           <h4 className="text-sm font-bold text-[#152220] truncate">
-                            {w.full_name}
+                            {cleanDisplayName(w.full_name)}
                           </h4>
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
                             {distanceKm} km
@@ -1468,7 +1638,7 @@ function JobDiscoveryContent() {
                         </div>
 
                         <div className="flex items-center gap-1.5 text-[11px] text-[#576563] mt-0.5">
-                          <span className="capitalize">{w.primary_category}</span>
+                          <span className="capitalize">{formatWorkerCategory(w.primary_category, w.skills)}</span>
                           <span>•</span>
                           <span>{w.years_experience} yrs exp</span>
                         </div>
@@ -1519,6 +1689,21 @@ function JobDiscoveryContent() {
                         ))}
                       </div>
                     )}
+
+                    {/* Worker Personalized Quote */}
+                    <div className="flex items-center justify-between p-2.5 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2]">
+                      <div>
+                        <span className="text-[11px] text-[#576563] font-medium block">Service Quote</span>
+                        <span className="text-[9px] text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          Fair Price Verified
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-base font-extrabold text-[#0D4A52]">
+                          ₹{getWorkerQuote(w)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Actions & Book Now Button */}
@@ -1579,11 +1764,11 @@ function JobDiscoveryContent() {
                 {bookingConfirmWorker.avatar_url ? (
                   <img
                     src={bookingConfirmWorker.avatar_url}
-                    alt={bookingConfirmWorker.full_name}
+                    alt={cleanDisplayName(bookingConfirmWorker.full_name)}
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  bookingConfirmWorker.full_name
+                  cleanDisplayName(bookingConfirmWorker.full_name)
                     .split(' ')
                     .map((n) => n[0])
                     .slice(0, 2)
@@ -1592,10 +1777,10 @@ function JobDiscoveryContent() {
               </div>
               <div className="min-w-0 flex-1">
                 <h4 className="text-base font-bold text-[#152220] truncate">
-                  {bookingConfirmWorker.full_name}
+                  {cleanDisplayName(bookingConfirmWorker.full_name)}
                 </h4>
                 <div className="flex items-center gap-2 text-xs text-[#576563]">
-                  <span className="capitalize">{bookingConfirmWorker.primary_category}</span>
+                  <span className="capitalize">{formatWorkerCategory(bookingConfirmWorker.primary_category, bookingConfirmWorker.skills)}</span>
                   <span>•</span>
                   <span>{(bookingConfirmWorker.distance_meters / 1000).toFixed(1)} km away</span>
                 </div>
@@ -1642,9 +1827,9 @@ function JobDiscoveryContent() {
 
               <div className="flex justify-between items-center py-2.5 bg-emerald-50/60 px-3 rounded-xl border border-emerald-100">
                 <div>
-                  <span className="font-bold text-[#0D4A52] block">Agreed Service Amount:</span>
+                  <span className="font-bold text-[#0D4A52] block">Booking Agreed Amount:</span>
                   <span className="text-[10px] text-[#576563]">
-                    Fair Price Range: ₹{job.estimated_min_price_inr || 300} – ₹{job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))}
+                    Worker Quote: ₹{getWorkerQuote(bookingConfirmWorker)} • Fair Range: ₹{job.estimated_min_price_inr || 300} – ₹{job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 font-black text-lg text-[#0D4A52]">
@@ -1653,7 +1838,7 @@ function JobDiscoveryContent() {
                     type="number"
                     min={job.estimated_min_price_inr || 300}
                     max={job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))}
-                    step="50"
+                    step="10"
                     value={bookingAgreedPrice}
                     onChange={(e) => {
                       setBookingAgreedPrice(parseInt(e.target.value, 10) || 0);
@@ -1740,7 +1925,7 @@ function JobDiscoveryContent() {
               Calling Unavailable for Demo Worker
             </h3>
             <p className="text-xs text-[#576563] leading-relaxed">
-              <strong>{booking?.workerName}</strong> is an automated demo professional account without a live cellular subscriber identity.
+              <strong>{cleanDisplayName(booking?.workerName)}</strong> is an automated demo professional account without a live cellular subscriber identity.
             </p>
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-[11px] text-[#576563] text-left">
               🔒 <strong>In Live Production:</strong> When a real worker is booked and mutual acceptance is verified, this button initiates a direct, masked telecom carrier phone call to the verified phone number.
@@ -1767,10 +1952,10 @@ function JobDiscoveryContent() {
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-[#0D4A52] text-white">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs">
-                  {booking?.workerName?.[0] || 'P'}
+                  {cleanDisplayName(booking?.workerName)?.[0] || 'P'}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold">{booking?.workerName || 'Worker'}</h3>
+                  <h3 className="text-sm font-bold">{cleanDisplayName(booking?.workerName) || 'Worker'}</h3>
                   <span className="text-[10px] text-white/80 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     Online for Booking
@@ -1851,7 +2036,7 @@ function JobDiscoveryContent() {
                       className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                     >
                       <div className="flex items-center gap-1.5 text-[10px] text-[#83928E] mb-1">
-                        <span className="font-semibold text-[#152220]">{m.senderName}</span>
+                        <span className="font-semibold text-[#152220]">{cleanDisplayName(m.senderName)}</span>
                         {isDemoSimulation && (
                           <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold text-[9px] border border-amber-200">
                             Demo Simulation
@@ -1922,11 +2107,11 @@ function JobDiscoveryContent() {
                   {activeWorkerProfile.avatar_url ? (
                     <img
                       src={activeWorkerProfile.avatar_url}
-                      alt={activeWorkerProfile.full_name}
+                      alt={cleanDisplayName(activeWorkerProfile.full_name)}
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    activeWorkerProfile.full_name
+                    cleanDisplayName(activeWorkerProfile.full_name)
                       .split(' ')
                       .map((n) => n[0])
                       .slice(0, 2)
@@ -1936,11 +2121,11 @@ function JobDiscoveryContent() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-[#152220]">
-                    {activeWorkerProfile.full_name}
+                    {cleanDisplayName(activeWorkerProfile.full_name)}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-[#217E66] font-semibold capitalize">
-                      {activeWorkerProfile.primary_category}
+                      {formatWorkerCategory(activeWorkerProfile.primary_category, activeWorkerProfile.skills)}
                     </span>
                     <Badge variant="teal" className="text-[10px]">
                       Verified ID
@@ -2016,6 +2201,21 @@ function JobDiscoveryContent() {
               )}
             </div>
 
+            {/* Worker Individual Quote for Job */}
+            <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2] flex items-center justify-between">
+              <div>
+                <span className="text-xs text-[#576563] font-medium block">Personalized Service Quote:</span>
+                <span className="text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  Fair Price Range: ₹{job.estimated_min_price_inr || 300} – ₹{job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-base font-extrabold text-[#0D4A52]">
+                  ₹{getWorkerQuote(activeWorkerProfile)}
+                </span>
+              </div>
+            </div>
+
             {/* Privacy & Bidding Assurance */}
             <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-[11px] text-[#576563] space-y-1">
               <div className="flex items-center gap-1.5 font-semibold text-[#152220]">
@@ -2065,7 +2265,7 @@ function JobDiscoveryContent() {
                 <div>
                   <h3 className="text-base font-bold text-[#152220]">Cancel Booking</h3>
                   <p className="text-xs text-[#576563]">
-                    Please select a reason to cancel service with {booking?.workerName || 'this professional'}.
+                    Please select a reason to cancel service with {cleanDisplayName(booking?.workerName) || 'this professional'}.
                   </p>
                 </div>
               </div>

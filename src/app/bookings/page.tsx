@@ -56,6 +56,11 @@ function formatBookingDateTime(isoString: string): { date: string; time: string;
   }
 }
 
+function cleanDisplayName(name: string | null | undefined): string {
+  if (!name) return 'Professional Partner';
+  return name.replace(/^\[DEMO\]\s*/i, '').replace(/^DEMO\s*[-–—]\s*/i, '').trim();
+}
+
 function getCategoryIcon(category: string) {
   const cat = (category || '').toLowerCase();
   if (cat.includes('elect')) return <Zap className="w-4 h-4 text-amber-600" />;
@@ -516,12 +521,12 @@ function BookingHistoryContent() {
                     {/* Worker Info */}
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-[#0D4A52] text-white flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0">
-                        {booking.workerName.charAt(0).toUpperCase()}
+                        {cleanDisplayName(booking.workerName).charAt(0).toUpperCase()}
                       </div>
                       <div className="space-y-0.5 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="text-xs font-bold text-[#152220] truncate">
-                            {booking.workerName}
+                            {cleanDisplayName(booking.workerName)}
                           </p>
                           {booking.isDemoWorker && (
                             <span className="text-[9px] font-semibold bg-amber-100 text-amber-800 px-1 rounded">

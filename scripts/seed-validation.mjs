@@ -12,6 +12,8 @@ export const PERMITTED_CATEGORIES = Object.freeze([
   'painting',
   'appliance_repair',
   'cooking',
+  'maid',
+  'other',
 ]);
 
 export const PERMITTED_INITIAL_JOB_STATUSES = Object.freeze(['posted', 'POSTED']);

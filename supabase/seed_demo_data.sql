@@ -50,7 +50,7 @@ INSERT INTO public.profiles (
     id, phone, email, full_name, avatar_url, role, verification_status, primary_city
 )
 SELECT
-    id, '+919999000099', email, '[DEMO] Ananya Deshmukh',
+    id, '+919999000099', email, 'Ananya Deshmukh',
     'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
     'customer', 'unverified', 'Mumbai'
 FROM auth.users
@@ -74,7 +74,7 @@ BEGIN
     -- 1. Ramesh Kumar (Plumbing - Bandra West)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'ramesh-plumber@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000001', 'ramesh-plumber@sahayak.demo.internal', '[DEMO] Ramesh Kumar', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000001', 'ramesh-plumber@sahayak.demo.internal', 'Ramesh Kumar', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -96,7 +96,7 @@ BEGIN
     -- 2. Santosh Shinde (Plumbing - Dadar West)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'santosh-plumber@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000002', 'santosh-plumber@sahayak.demo.internal', '[DEMO] Santosh Shinde', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000002', 'santosh-plumber@sahayak.demo.internal', 'Santosh Shinde', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -117,7 +117,7 @@ BEGIN
     -- 3. Ganesh Patil (Plumbing - Andheri East)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'ganesh-plumber@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000003', 'ganesh-plumber@sahayak.demo.internal', '[DEMO] Ganesh Patil', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000003', 'ganesh-plumber@sahayak.demo.internal', 'Ganesh Patil', 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -138,7 +138,7 @@ BEGIN
     -- 4. Arif Khan (Electrical - Kurla West)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'arif-electrician@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000004', 'arif-electrician@sahayak.demo.internal', '[DEMO] Arif Khan', 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000004', 'arif-electrician@sahayak.demo.internal', 'Arif Khan', 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -159,7 +159,7 @@ BEGIN
     -- 5. Vikramaditya Sharma (Electrical - Powai)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'vikram-electrician@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000005', 'vikram-electrician@sahayak.demo.internal', '[DEMO] Vikramaditya Sharma', 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000005', 'vikram-electrician@sahayak.demo.internal', 'Vikramaditya Sharma', 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -180,7 +180,7 @@ BEGIN
     -- 6. Sunita Jadhav (Cleaning - Worli)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'sunita-cleaner@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000006', 'sunita-cleaner@sahayak.demo.internal', '[DEMO] Sunita Jadhav', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000006', 'sunita-cleaner@sahayak.demo.internal', 'Sunita Jadhav', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -201,7 +201,7 @@ BEGIN
     -- 7. Priya Kamble (Cleaning - Juhu)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'priya-cleaner@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000007', 'priya-cleaner@sahayak.demo.internal', '[DEMO] Priya Kamble', 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000007', 'priya-cleaner@sahayak.demo.internal', 'Priya Kamble', 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -222,7 +222,7 @@ BEGIN
     -- 8. Jagdish Mistry (Carpentry - Malad West)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'jagdish-carpenter@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000008', 'jagdish-carpenter@sahayak.demo.internal', '[DEMO] Jagdish Mistry', 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000008', 'jagdish-carpenter@sahayak.demo.internal', 'Jagdish Mistry', 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -243,7 +243,7 @@ BEGIN
     -- 9. Manoj Varma (Painting - Goregaon East)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'manoj-painter@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000009', 'manoj-painter@sahayak.demo.internal', '[DEMO] Manoj Varma', 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000009', 'manoj-painter@sahayak.demo.internal', 'Manoj Varma', 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -264,7 +264,7 @@ BEGIN
     -- 10. Deepak Nair (Appliance Repair - Borivali West)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'deepak-appliance@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000010', 'deepak-appliance@sahayak.demo.internal', '[DEMO] Deepak Nair', 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000010', 'deepak-appliance@sahayak.demo.internal', 'Deepak Nair', 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -285,7 +285,7 @@ BEGIN
     -- 11. Kavita Deshmukh (Cooking - Ghatkopar East)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'kavita-cook@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000011', 'kavita-cook@sahayak.demo.internal', '[DEMO] Kavita Deshmukh', 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000011', 'kavita-cook@sahayak.demo.internal', 'Kavita Deshmukh', 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -306,7 +306,7 @@ BEGIN
     -- 12. Lata Gaikwad (Maid / House Help - Chembur)
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'lata-maid@sahayak.demo.internal';
     INSERT INTO public.profiles (id, phone, email, full_name, avatar_url, role, verification_status, primary_city)
-    VALUES (v_uid, '+919999000012', 'lata-maid@sahayak.demo.internal', '[DEMO] Lata Gaikwad', 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=150', 'worker', 'unverified', 'Mumbai')
+    VALUES (v_uid, '+919999000012', 'lata-maid@sahayak.demo.internal', 'Lata Gaikwad', 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=150', 'worker', 'unverified', 'Mumbai')
     ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, verification_status = 'unverified', primary_city = 'Mumbai';
 
     INSERT INTO public.worker_profiles (
@@ -441,7 +441,7 @@ BEGIN
         created_at, updated_at
     ) VALUES (
         v_job_id, v_cust_id, NULL, 'plumbing',
-        '[DEMO] Kitchen Sink Drain & Mixer Tap Leakage Repair',
+        'Kitchen Sink Drain & Mixer Tap Leakage Repair',
         'Kitchen basin pipe leaking into under-sink cabinet. Looking for prompt diagnosis and replacement of damaged fittings or washers.',
         'standard', 'posted',
         ST_SetSRID(ST_MakePoint(72.8295, 19.0596), 4326)::geography,

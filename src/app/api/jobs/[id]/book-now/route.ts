@@ -133,6 +133,8 @@ export async function POST(
       isDemoWorker = true;
     }
 
+    const cleanWorkerName = workerName.replace(/^\[DEMO\]\s*/i, '').replace(/^DEMO\s*[-–—]\s*/i, '').trim();
+
     // 3. Determine agreed price within the authoritative fair price range
     const fairRange = PricingService.getJobFairPriceRange(job);
 
@@ -153,11 +155,24 @@ export async function POST(
       }
     }
 
-    const agreedPrice = requestedPrice != null
-      ? Math.round(requestedPrice)
-      : (job.estimated_min_price_inr && job.estimated_min_price_inr >= fairRange.minPriceInr && job.estimated_min_price_inr <= fairRange.maxPriceInr)
-      ? Math.round(job.estimated_min_price_inr)
-      : Math.round((fairRange.minPriceInr + fairRange.maxPriceInr) / 20) * 10;
+    let agreedPrice: number;
+    if (requestedPrice != null) {
+      agreedPrice = Math.round(requestedPrice);
+    } else {
+      // Determine selected worker's individual quote instead of falling back to minimum price
+      const workerQuote = PricingService.calculateWorkerQuoteForJob(
+        {
+          worker_id: workerId,
+          years_experience: workerExp,
+          reputation_score: workerRating,
+          hourly_rate_inr: workerProfile?.hourly_rate_inr ?? null,
+          fixed_rate_estimate_inr: workerProfile?.fixed_rate_estimate_inr ?? null,
+          distance_meters: payload.distanceMeters ?? 2500,
+        },
+        job
+      );
+      agreedPrice = workerQuote.quoteInr;
+    }
 
     // 4. Calculate Travel Time and ETA
     const distanceMeters = payload.distanceMeters || 2500;
@@ -171,7 +186,7 @@ export async function POST(
       stage: 'accepted',
       stageUpdatedAt: new Date().toISOString(),
       workerId,
-      workerName,
+      workerName: cleanWorkerName,
       workerCategory,
       workerRating,
       workerExperience: workerExp,

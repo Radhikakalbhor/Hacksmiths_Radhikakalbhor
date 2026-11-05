@@ -174,4 +174,14 @@ export class JobsService {
 
     return data ?? [];
   }
+
+  /**
+   * Calculates a tailored, individual quote for a worker on a job within the fair price range.
+   */
+  static calculateWorkerJobQuote(
+    worker: Parameters<typeof PricingService.calculateWorkerQuoteForJob>[0],
+    job: Parameters<typeof PricingService.calculateWorkerQuoteForJob>[1]
+  ) {
+    return PricingService.calculateWorkerQuoteForJob(worker, job);
+  }
 }
