@@ -23,6 +23,7 @@ export interface WalletTransaction {
   status: TransactionStatus;
   description: string;
   referenceId?: string | null;
+  isDemo?: boolean;
   createdAt: string;
 }
 
@@ -34,6 +35,8 @@ export interface WorkerWallet {
   totalEarnedInr: number;
   totalWithdrawnInr: number;
   totalDeductionsInr: number;
+  isDemo?: boolean;
+  isWithdrawable?: boolean;
   createdAt: string;
   updatedAt: string;
 }

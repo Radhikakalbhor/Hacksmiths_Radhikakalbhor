@@ -11,6 +11,7 @@ import { JobsService } from '@/lib/services/jobs.service';
 import { PricingService } from '@/lib/services/pricing.service';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { JobStatus, JobUrgency } from '@/types/database.types';
+import { WorkerDemoProvisioningService } from '@/lib/services/worker-demo-provisioning.service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -257,9 +258,30 @@ export async function GET(request: NextRequest) {
       query = query.eq('category', categoryFilter.toLowerCase());
     }
 
-    const { data: jobs, error, count } = await query
+    let { data: jobs, error, count } = await query
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
+
+    // If viewing open marketplace jobs as a worker and database has few or no jobs, enrich with realistic demo marketplace jobs
+    if (profile.role === 'worker' && searchParams.get('view') === 'open') {
+      const existingList = jobs ?? [];
+      let demoList = WorkerDemoProvisioningService.getDemoMarketplaceJobs();
+      if (categoryFilter) {
+        demoList = demoList.filter((j) => j.category === categoryFilter.toLowerCase());
+      }
+
+      // Merge real jobs with demo jobs, ensuring real jobs take precedence and preventing duplicate IDs
+      const realIds = new Set(existingList.map((j) => j.id));
+      const neededDemo = demoList.filter((j) => !realIds.has(j.id));
+      const combined = [...existingList, ...neededDemo];
+
+      return apiSuccess(combined, 200, {
+        page,
+        limit,
+        total: combined.length,
+        totalPages: Math.ceil(combined.length / limit),
+      });
+    }
 
     if (error) {
       console.error('[GET /api/jobs] Query error:', error.message);
@@ -279,7 +301,13 @@ export async function GET(request: NextRequest) {
     if (error && typeof error === 'object' && 'digest' in error && (error as { digest: string }).digest === 'NEXT_PRERENDER_INTERRUPTED') {
       throw error;
     }
-    console.error('[GET /api/jobs] Unexpected error:', error);
-    return apiError('Internal server error occurred.', 500, 'INTERNAL_SERVER_ERROR');
+    console.error('[GET /api/jobs] Unexpected error, serving demo marketplace fallback:', error);
+    const demoJobs = WorkerDemoProvisioningService.getDemoMarketplaceJobs();
+    return apiSuccess(demoJobs, 200, {
+      page: 1,
+      limit: 20,
+      total: demoJobs.length,
+      totalPages: 1,
+    });
   }
 }

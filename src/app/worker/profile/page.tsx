@@ -26,6 +26,15 @@ interface ProfileData {
   phone: string;
   primaryCity: string;
   role: string;
+  workerProfile?: {
+    primaryCategory: string;
+    skills: string[];
+    bio: string;
+    yearsExperience: number;
+    isAvailable: boolean;
+    reputationScore: number;
+    totalCompletedJobs: number;
+  };
 }
 
 export default function WorkerProfilePage() {
@@ -165,31 +174,46 @@ export default function WorkerProfilePage() {
             </div>
           </Card>
 
-          {/* Trade Details & Badges */}
+          {/* Trade Details, Bio & Badges */}
           <Card className="p-6 md:col-span-2 bg-white border border-[#E5DFD2] rounded-2xl shadow-xs space-y-6">
             <div>
-              <h3 className="text-sm font-bold text-[#0D4A52] uppercase tracking-wider flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-[#217E66]" />
-                <span>Trade Specializations</span>
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-[#0D4A52] uppercase tracking-wider flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-[#217E66]" />
+                  <span>Primary Trade Specialization</span>
+                </h3>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  {profile?.workerProfile?.yearsExperience ?? 2}+ Years Experience
+                </span>
+              </div>
               <p className="text-xs text-[#576563] mt-1">
                 Your registered categories for receiving direct customer dispatch requests.
               </p>
             </div>
 
+            {/* Registered Skills & Categories */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
               <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950 font-bold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Plumbing</span>
+                <span className="capitalize">{profile?.workerProfile?.primaryCategory || 'General Maintenance'}</span>
               </div>
-              <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950 font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Sanitary Repair</span>
-              </div>
-              <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950 font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Emergency Leakage</span>
-              </div>
+              {(profile?.workerProfile?.skills || []).map((skill, idx) => (
+                <div key={idx} className="p-3 rounded-xl border border-gray-200 bg-gray-50 text-[#152220] font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="capitalize">{skill}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Worker Bio & Summary */}
+            <div className="pt-4 border-t border-[#E5DFD2]">
+              <h4 className="text-xs font-bold text-[#0D4A52] uppercase tracking-wider flex items-center gap-2 mb-2">
+                <Sparkles className="w-4 h-4 text-[#217E66]" />
+                <span>Professional Bio & Summary</span>
+              </h4>
+              <p className="text-xs text-[#576563] leading-relaxed p-3 rounded-xl bg-[#FAF9F5] border border-[#E5DFD2]">
+                {profile?.workerProfile?.bio || 'Verified tradesperson providing trusted household services on the Sahayak platform.'}
+              </p>
             </div>
 
             <div className="pt-4 border-t border-[#E5DFD2]">

@@ -16,7 +16,7 @@ export default function WorkerReputationPage() {
         </div>
       }
     >
-      <WorkerDashboardView initialTab="overview" />
+      <WorkerDashboardView initialTab="reputation" />
     </Suspense>
   );
 }

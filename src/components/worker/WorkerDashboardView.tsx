@@ -21,6 +21,7 @@ import {
   SlidersHorizontal,
   Compass,
   ShieldCheck,
+  Star,
 } from 'lucide-react';
 import {
   WorkerWallet,
@@ -63,7 +64,7 @@ interface Job {
 }
 
 export interface WorkerDashboardViewProps {
-  initialTab?: 'overview' | 'wallet' | 'marketplace' | 'admin';
+  initialTab?: 'overview' | 'wallet' | 'marketplace' | 'reputation' | 'admin';
 }
 
 export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {}) {
@@ -77,13 +78,23 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
   // Worker Navigation Tabs
   const tabFromQuery = searchParams.get('tab');
   const validTab =
-    tabFromQuery === 'wallet' || tabFromQuery === 'marketplace' || tabFromQuery === 'admin' || tabFromQuery === 'overview'
+    tabFromQuery === 'wallet' ||
+    tabFromQuery === 'marketplace' ||
+    tabFromQuery === 'reputation' ||
+    tabFromQuery === 'admin' ||
+    tabFromQuery === 'overview'
       ? tabFromQuery
       : initialTab || 'overview';
-  const [workerNavTab, setWorkerNavTab] = useState<'overview' | 'wallet' | 'marketplace' | 'admin'>(validTab);
+  const [workerNavTab, setWorkerNavTab] = useState<'overview' | 'wallet' | 'marketplace' | 'reputation' | 'admin'>(validTab);
 
   useEffect(() => {
-    if (tabFromQuery === 'wallet' || tabFromQuery === 'marketplace' || tabFromQuery === 'admin' || tabFromQuery === 'overview') {
+    if (
+      tabFromQuery === 'wallet' ||
+      tabFromQuery === 'marketplace' ||
+      tabFromQuery === 'reputation' ||
+      tabFromQuery === 'admin' ||
+      tabFromQuery === 'overview'
+    ) {
       setWorkerNavTab(tabFromQuery);
     }
   }, [tabFromQuery]);
@@ -132,6 +143,22 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
     note: '',
   });
   const [submittingBid, setSubmittingBid] = useState(false);
+
+  // Reputation & Reviews State
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [reputationData, setReputationData] = useState<{
+    averageRating: number;
+    totalReviews: number;
+    totalCompletedJobs: number;
+    completionRate: number;
+    punctualityScore: number;
+    qualityScore: number;
+    pricingHonestyScore: number;
+    badges: string[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    reviews: any[];
+  } | null>(null);
+  const [loadingReputation, setLoadingReputation] = useState(false);
 
   // Status Alerts
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -291,6 +318,22 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
     }
   }, []);
 
+  // 6. Fetch Reputation & Customer Reviews
+  const fetchReputation = useCallback(async () => {
+    setLoadingReputation(true);
+    try {
+      const res = await fetch('/api/worker/reputation');
+      const json = await res.json();
+      if (json.success && json.data) {
+        setReputationData(json.data);
+      }
+    } catch {
+      // Ignore
+    } finally {
+      setLoadingReputation(false);
+    }
+  }, []);
+
   // Trigger initial fetches when authenticated as worker
   useEffect(() => {
     if (sessionUser && (userRole === 'worker' || userRole === 'admin')) {
@@ -298,6 +341,7 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
       fetchWalletData();
       fetchNotifications();
       fetchWorkerOpenJobs();
+      fetchReputation();
 
       // Polling notifications every 15 seconds
       const timer = setInterval(() => {
@@ -305,7 +349,7 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
       }, 15000);
       return () => clearInterval(timer);
     }
-  }, [sessionUser, userRole, fetchCategorizedJobs, fetchWalletData, fetchNotifications, fetchWorkerOpenJobs]);
+  }, [sessionUser, userRole, fetchCategorizedJobs, fetchWalletData, fetchNotifications, fetchWorkerOpenJobs, fetchReputation]);
 
   // Handle Mark Single Notification Read
   const handleMarkNotificationRead = async (id: string) => {
@@ -553,6 +597,27 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
               )}
             </button>
 
+            <button
+              onClick={() => setWorkerNavTab('reputation')}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
+                workerNavTab === 'reputation'
+                  ? 'bg-[#0D4A52] text-white shadow-xs'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+              <span>Reputation & Reviews</span>
+              {reputationData && (
+                <span
+                  className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    workerNavTab === 'reputation' ? 'bg-amber-400 text-amber-950' : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  ★ {reputationData.averageRating}
+                </span>
+              )}
+            </button>
+
             {(userRole === 'admin' || searchParams.get('admin') === 'true') && (
               <button
                 onClick={() => setWorkerNavTab('admin')}
@@ -576,12 +641,13 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
                 fetchCategorizedJobs();
                 fetchWalletData();
                 fetchWorkerOpenJobs();
+                fetchReputation();
               }}
-              disabled={loadingCategorizedJobs || loadingWallet || loadingOpenJobs}
+              disabled={loadingCategorizedJobs || loadingWallet || loadingOpenJobs || loadingReputation}
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 mr-1 ${
-                  loadingCategorizedJobs || loadingWallet || loadingOpenJobs ? 'animate-spin' : ''
+                  loadingCategorizedJobs || loadingWallet || loadingOpenJobs || loadingReputation ? 'animate-spin' : ''
                 }`}
               />
               <span>Refresh</span>
@@ -871,7 +937,181 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
           </div>
         )}
 
-        {/* TAB 4: ADMIN CONTROLS */}
+        {/* TAB 4: REPUTATION & REVIEWS */}
+        {workerNavTab === 'reputation' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
+                  <Star className="w-5 h-5 text-amber-500 fill-amber-400" />
+                  <span>Worker Reputation & Customer Reviews</span>
+                </h2>
+                <p className="text-xs text-[#576563]">
+                  Ratings, verified feedback, and reliability metrics calculated from completed services.
+                </p>
+              </div>
+              {reputationData && (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-bold text-amber-900">
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                  <span>{reputationData.averageRating} Rating</span>
+                  <span className="text-amber-600 font-normal">({reputationData.totalReviews} reviews)</span>
+                </div>
+              )}
+            </div>
+
+            {loadingReputation ? (
+              <div className="p-12 text-center text-xs text-[#576563] flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-[#0D4A52]" />
+                <span>Loading reputation and customer reviews...</span>
+              </div>
+            ) : reputationData ? (
+              <div className="space-y-6">
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="p-4 bg-white border border-[#E5DFD2]">
+                    <div className="text-xs text-gray-500 font-semibold flex items-center justify-between">
+                      <span>Overall Rating</span>
+                      <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                    </div>
+                    <div className="mt-2 text-2xl font-black text-[#152220] flex items-baseline gap-1">
+                      <span>{reputationData.averageRating}</span>
+                      <span className="text-xs text-gray-400 font-normal">/ 5.0</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Based on {reputationData.totalReviews} verified ratings
+                    </p>
+                  </Card>
+
+                  <Card className="p-4 bg-white border border-[#E5DFD2]">
+                    <div className="text-xs text-gray-500 font-semibold flex items-center justify-between">
+                      <span>Job Completion</span>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="mt-2 text-2xl font-black text-[#152220] flex items-baseline gap-1">
+                      <span>{reputationData.completionRate}%</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {reputationData.totalCompletedJobs} jobs successfully finished
+                    </p>
+                  </Card>
+
+                  <Card className="p-4 bg-white border border-[#E5DFD2]">
+                    <div className="text-xs text-gray-500 font-semibold flex items-center justify-between">
+                      <span>Punctuality Score</span>
+                      <Sparkles className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <div className="mt-2 text-2xl font-black text-[#152220] flex items-baseline gap-1">
+                      <span>{reputationData.punctualityScore}</span>
+                      <span className="text-xs text-gray-400 font-normal">/ 5.0</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">On-time arrival track record</p>
+                  </Card>
+
+                  <Card className="p-4 bg-white border border-[#E5DFD2]">
+                    <div className="text-xs text-gray-500 font-semibold flex items-center justify-between">
+                      <span>Pricing Honesty</span>
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="mt-2 text-2xl font-black text-[#152220] flex items-baseline gap-1">
+                      <span>{reputationData.pricingHonestyScore}</span>
+                      <span className="text-xs text-gray-400 font-normal">/ 5.0</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">Zero hidden costs reported</p>
+                  </Card>
+                </div>
+
+                {/* Trust Badges */}
+                {reputationData.badges && reputationData.badges.length > 0 && (
+                  <div className="p-4 bg-teal-50/50 border border-teal-100 rounded-xl space-y-2">
+                    <span className="text-xs font-bold text-teal-900 uppercase tracking-wider">
+                      Earned Trust & Quality Badges
+                    </span>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {reputationData.badges.map((badge: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 bg-white border border-teal-200 text-teal-950 font-bold text-xs rounded-full shadow-xs flex items-center gap-1.5"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                          <span>{badge}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Customer Reviews List */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-[#152220] flex items-center gap-2">
+                    <span>Customer Feedback & Testimonials</span>
+                    <span className="text-xs font-normal text-gray-500">
+                      ({reputationData.reviews?.length || 0} reviews)
+                    </span>
+                  </h3>
+
+                  {(!reputationData.reviews || reputationData.reviews.length === 0) ? (
+                    <Card className="p-8 text-center text-xs text-gray-500">
+                      No customer reviews yet. Reviews will automatically appear once customers complete their bookings.
+                    </Card>
+                  ) : (
+                    <div className="space-y-3">
+                      {reputationData.reviews.map((rev: any) => (
+                        <Card key={rev.id} className="p-4 bg-white border border-[#E5DFD2] space-y-2.5">
+                          <div className="flex items-start justify-between flex-wrap gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-[#152220]">{rev.customerName}</span>
+                                {rev.verified && (
+                                  <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded flex items-center gap-1">
+                                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                    <span>Verified Customer</span>
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {rev.jobTitle} • <span className="capitalize font-medium text-gray-700">{rev.category}</span>
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-4 h-4 ${
+                                    i < Math.floor(rev.rating)
+                                      ? 'text-amber-400 fill-amber-400'
+                                      : 'text-gray-200'
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-xs font-bold text-gray-800 ml-1">
+                                {Number(rev.rating).toFixed(1)}
+                              </span>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-[#2A3B39] leading-relaxed bg-[#FBF9F5] p-3 rounded-lg border border-[#E5DFD2]/60">
+                            &ldquo;{rev.comment}&rdquo;
+                          </p>
+
+                          <div className="flex items-center justify-between text-[11px] text-gray-400 pt-1">
+                            <span>{rev.date}</span>
+                            <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Completed Service</span>
+                            </span>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* TAB 5: ADMIN CONTROLS */}
         {workerNavTab === 'admin' && (
           <AdminControlPanel
             initialSettings={settings}
@@ -908,6 +1148,7 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
         <WorkerWithdrawModal
           availableBalanceInr={availableBalance}
           payoutMethods={payoutMethods}
+          isDemo={wallet?.isDemo}
           onClose={() => setWithdrawModalOpen(false)}
           onSuccess={() => {
             fetchWalletData();

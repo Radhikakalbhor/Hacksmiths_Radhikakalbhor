@@ -9,6 +9,7 @@ import { WorkerPayoutMethod, PayoutMethodType } from '@/types/wallet';
 interface WithdrawModalProps {
   availableBalanceInr: number;
   payoutMethods: WorkerPayoutMethod[];
+  isDemo?: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -16,6 +17,7 @@ interface WithdrawModalProps {
 export function WorkerWithdrawModal({
   availableBalanceInr,
   payoutMethods,
+  isDemo,
   onClose,
   onSuccess,
 }: WithdrawModalProps) {
@@ -155,6 +157,18 @@ export function WorkerWithdrawModal({
             <span>₹{availableBalanceInr.toLocaleString('en-IN')}</span>
           </span>
         </div>
+
+        {isDemo && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Demo Wallet Balance Notice</p>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                This account is currently populated with sample demo funds. Real money withdrawals cannot be processed for demo balances. Complete verified customer jobs to accumulate withdrawable balance.
+              </p>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-center gap-2">

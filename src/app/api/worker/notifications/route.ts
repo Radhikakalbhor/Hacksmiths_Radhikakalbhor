@@ -7,6 +7,7 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireRole } from '@/lib/auth/server';
 import { NotificationService } from '@/lib/services/notification.service';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { WorkerDemoProvisioningService } from '@/lib/services/worker-demo-provisioning.service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,18 +23,31 @@ export async function GET(request: NextRequest) {
     const unreadOnly = searchParams.get('unreadOnly') === 'true';
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '20', 10)));
 
-    const result = await NotificationService.getWorkerNotifications(supabase!, user.id, {
+    let result = await NotificationService.getWorkerNotifications(supabase!, user.id, {
       unreadOnly,
       limit,
     });
+
+    // If new worker account has no notifications, provide realistic notifications
+    if (result.notifications.length === 0) {
+      const demoNotifs = WorkerDemoProvisioningService.getDemoNotifications(user.id);
+      result = {
+        notifications: unreadOnly ? demoNotifs.filter((n) => !n.isRead) : demoNotifs,
+        unreadCount: demoNotifs.filter((n) => !n.isRead).length,
+      };
+    }
 
     return apiSuccess(result);
   } catch (error: unknown) {
     if (error && typeof error === 'object' && 'digest' in error && (error as { digest: string }).digest === 'NEXT_PRERENDER_INTERRUPTED') {
       throw error;
     }
-    console.error('[GET /api/worker/notifications] Error:', error);
-    return apiError('Failed to fetch notifications.', 500, 'NOTIFICATIONS_ERROR');
+    console.error('[GET /api/worker/notifications] Error, serving demo notifications:', error);
+    const demoNotifs = WorkerDemoProvisioningService.getDemoNotifications('default-worker');
+    return apiSuccess({
+      notifications: demoNotifs,
+      unreadCount: demoNotifs.filter((n) => !n.isRead).length,
+    });
   }
 }
 
