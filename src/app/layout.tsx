@@ -10,6 +10,7 @@ const geistSans = { variable: '--font-geist-sans' };
 const geistMono = { variable: '--font-geist-mono' };
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://sahayak-hazel-five.vercel.app'),
   title: 'Sahayak | AI-Powered Hyperlocal Services Marketplace',
   description:
     'Trusted help. Fair work. Stronger communities. Find vetted local plumbers, electricians, cleaners, and household helpers with transparent price benchmarks and OTP-verified safety.',
@@ -74,7 +75,9 @@ export default function RootLayout({
           <Navbar />
         </Suspense>
         <div className="flex-1 relative z-0">{children}</div>
-        <Footer />
+        <Suspense fallback={null}>
+          <Footer />
+        </Suspense>
       </body>
     </html>
   );
