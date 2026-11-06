@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  X,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -269,9 +270,10 @@ export default function AuditLogPage() {
               <h3 className="font-bold text-[#152220]">Audit Log Entry #{selectedLog.id.slice(0, 8)}</h3>
               <button
                 onClick={() => setSelectedLog(null)}
-                className="text-[#576563] hover:text-[#152220] text-xs font-bold"
+                className="text-[#576563] hover:text-[#152220] text-xs font-bold flex items-center gap-1"
               >
-                ✕ Close
+                <X className="w-3.5 h-3.5" />
+                <span>Close</span>
               </button>
             </div>
 

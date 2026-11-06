@@ -513,7 +513,7 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
   // Loading & Role Guard
   if (loadingSession) {
     return (
-      <div className="min-h-screen bg-[#FBF9F5] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="flex items-center gap-2 text-xs text-[#576563]">
           <RefreshCw className="w-4 h-4 animate-spin text-[#0D4A52]" />
           <span>Loading Sahayak Worker Portal...</span>
@@ -537,100 +537,26 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
   const totalActiveJobs = categorizedJobs.upcoming.length + categorizedJobs.pending.length + categorizedJobs.accepted.length;
 
   return (
-    <div className="min-h-screen bg-[#FBF9F5] text-[#152220] pb-20">
+    <div className="min-h-screen bg-transparent text-[#152220] pb-20">
       {/* Main Body */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
-        {/* Navigation Tabs */}
-        <div className="flex items-center justify-between border-b border-[#E5DFD2] pb-3 flex-wrap gap-2">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button
-              onClick={() => setWorkerNavTab('overview')}
-              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
-                workerNavTab === 'overview'
-                  ? 'bg-[#0D4A52] text-white shadow-xs'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Briefcase className="w-4 h-4" />
-              <span>Work Overview</span>
-              {totalActiveJobs > 0 && (
-                <span
-                  className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                    workerNavTab === 'overview' ? 'bg-teal-500 text-teal-950' : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  {totalActiveJobs}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setWorkerNavTab('wallet')}
-              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
-                workerNavTab === 'wallet'
-                  ? 'bg-[#0D4A52] text-white shadow-xs'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Wallet className="w-4 h-4" />
-              <span>Earnings & Wallet</span>
-            </button>
-
-            <button
-              onClick={() => setWorkerNavTab('marketplace')}
-              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
-                workerNavTab === 'marketplace'
-                  ? 'bg-[#0D4A52] text-white shadow-xs'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Compass className="w-4 h-4" />
-              <span>Open Marketplace</span>
-              {openJobs.length > 0 && (
-                <span
-                  className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                    workerNavTab === 'marketplace' ? 'bg-teal-500 text-teal-950' : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  {openJobs.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setWorkerNavTab('reputation')}
-              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
-                workerNavTab === 'reputation'
-                  ? 'bg-[#0D4A52] text-white shadow-xs'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
-              <span>Reputation & Reviews</span>
-              {reputationData && (
-                <span
-                  className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                    workerNavTab === 'reputation' ? 'bg-amber-400 text-amber-950' : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  ★ {reputationData.averageRating}
-                </span>
-              )}
-            </button>
-
-            {(userRole === 'admin' || searchParams.get('admin') === 'true') && (
-              <button
-                onClick={() => setWorkerNavTab('admin')}
-                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
-                  workerNavTab === 'admin'
-                    ? 'bg-[#0D4A52] text-white shadow-xs'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <SlidersHorizontal className="w-4 h-4" />
-                <span>Admin Controls</span>
-              </button>
-            )}
+        {/* Active Section Header */}
+        <div className="flex items-center justify-between border-b border-[#E5DFD2] pb-4 flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-extrabold text-[#152220] flex items-center gap-2">
+              {workerNavTab === 'overview' && 'Work Overview'}
+              {workerNavTab === 'wallet' && 'Earnings & Wallet'}
+              {workerNavTab === 'marketplace' && 'Open Marketplace'}
+              {workerNavTab === 'reputation' && 'Reputation & Reviews'}
+              {workerNavTab === 'admin' && 'Admin Control Panel'}
+            </h2>
+            <p className="text-xs text-[#576563] mt-0.5">
+              {workerNavTab === 'overview' && 'Manage your scheduled jobs, incoming offers, and service history.'}
+              {workerNavTab === 'wallet' && 'Track your earnings, account balance, and process payout withdrawals.'}
+              {workerNavTab === 'marketplace' && 'Explore real-time broadcasts and bid on jobs in your micro-market.'}
+              {workerNavTab === 'reputation' && 'Verified customer reviews and quality performance ratings.'}
+              {workerNavTab === 'admin' && 'Administrative management and moderation oversight.'}
+            </p>
           </div>
 
           <div className="flex items-center gap-2">

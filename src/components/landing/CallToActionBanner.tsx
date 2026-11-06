@@ -32,7 +32,7 @@ export function CallToActionBanner() {
                 href="/post-job"
                 className="inline-flex items-center justify-center font-semibold rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 px-6 py-3 text-base gap-2 text-white bg-[#217E66] hover:bg-[#165646] focus:ring-[#217E66] shadow-sm"
               >
-                <span>Post a Job Free</span>
+                <span>Assign a Job Free</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
 

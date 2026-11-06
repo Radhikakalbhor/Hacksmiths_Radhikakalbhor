@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   XCircle,
   Calendar,
+  Tag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -83,7 +84,7 @@ interface JobDetails {
 interface NearbyWorker {
   worker_id: string;
   full_name: string;
-  avatar_url: string | null;
+  avatar_url?: string | null;
   primary_category: string;
   skills: string[];
   bio: string | null;
@@ -293,7 +294,6 @@ function JobDiscoveryContent() {
         if (b.customerOtp) {
           setCustomerOtp(b.customerOtp);
         }
-
         if (b.isDemoWorker) {
           // Demo worker flow: exactly preserved simulated countdown
           if (b.simulatedSecondsRemaining) {
@@ -506,7 +506,7 @@ function JobDiscoveryContent() {
         years_experience: worker.years_experience,
         reputation_score: worker.reputation_score,
         average_rating: worker.average_rating,
-        distance_meters: worker.distance_meters,
+        distance_meters: worker.distance_meters ?? 2000,
         hourly_rate_inr: worker.hourly_rate_inr,
         fixed_rate_estimate_inr: worker.fixed_rate_estimate_inr,
       },
@@ -514,6 +514,21 @@ function JobDiscoveryContent() {
     );
     return calc.quoteInr;
   };
+
+  // Lock background scroll and flag modal-open when modals are open
+  useEffect(() => {
+    if (bookingConfirmWorker || showCancelModal) {
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.style.overflow = '';
+      document.body.classList.remove('modal-open');
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.classList.remove('modal-open');
+    };
+  }, [bookingConfirmWorker, showCancelModal]);
 
   // Initiate Booking Modal
   const handleOpenBookingConfirm = (worker: NearbyWorker) => {
@@ -549,7 +564,7 @@ function JobDiscoveryContent() {
           workerId: bookingConfirmWorker.worker_id,
           workerName: cleanDisplayName(bookingConfirmWorker.full_name),
           offeredPriceInr: bookingAgreedPrice,
-          distanceMeters: bookingConfirmWorker.distance_meters,
+          distanceMeters: bookingConfirmWorker.distance_meters ?? 0,
         }),
       });
 
@@ -826,7 +841,7 @@ function JobDiscoveryContent() {
       : null;
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-6">
       {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <Link
@@ -838,1052 +853,968 @@ function JobDiscoveryContent() {
         </Link>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 📍 FEATURE 3: JOB STATUS TIMELINE */}
-      {/* ========================================================================= */}
-      <div className="bg-white rounded-3xl border border-[#E5DFD2] p-6 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-bold text-[#152220] flex items-center gap-2">
-              <Compass className="w-4 h-4 text-[#217E66]" />
-              <span>Service Progress Timeline</span>
-            </h3>
-          </div>
-          {isJobCancelled ? (
-            <Badge variant="red" className="flex items-center gap-1 w-fit">
-              <XCircle className="w-3.5 h-3.5" />
-              <span>Job Cancelled</span>
-            </Badge>
-          ) : isJobCompleted ? (
-            <Badge variant="green" className="flex items-center gap-1 w-fit">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Job Completed</span>
-            </Badge>
-          ) : (
-            <Badge variant="teal" className="flex items-center gap-1 w-fit">
-              <Clock className="w-3.5 h-3.5" />
-              <span>In Progress</span>
-            </Badge>
-          )}
-        </div>
-
-        {/* Milestone Steps */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
-          {timelineMilestones.map((ms, idx) => {
-            const isCompleted = ms.status === 'completed';
-            const isCurrent = ms.status === 'current';
-
-            return (
-              <div
-                key={ms.id}
-                className={`p-3 rounded-2xl border transition-all text-center flex flex-col justify-between ${
-                  isCurrent
-                    ? 'bg-[#EBF4F3] border-[#217E66] text-[#0D4A52] shadow-sm ring-1 ring-[#217E66]'
-                    : isCompleted
-                    ? 'bg-[#FAF9F5] border-[#BCE5DA] text-[#152220]'
-                    : 'bg-gray-50/60 border-gray-200 text-gray-400 opacity-70'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-1 mb-1.5">
-                  {isCompleted ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  ) : isCurrent ? (
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#217E66] animate-ping" />
-                  ) : (
-                    <span className="text-[11px] font-mono text-gray-400 font-bold">{idx + 1}</span>
-                  )}
-                  <span className={`text-xs font-bold ${isCurrent ? 'text-[#0D4A52]' : isCompleted ? 'text-[#152220]' : 'text-gray-400'}`}>
-                    {ms.label}
-                  </span>
-                </div>
-                <p className="text-[10px] leading-tight text-[#576563] truncate">
-                  {ms.subtitle}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Cancelled Banner */}
-        {isJobCancelled && (
-          <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-2.5">
-            <XCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <span className="font-bold">Cancellation Notice:</span>
-              <p className="text-red-800">
-                {booking?.cancellationReason || 'This service request was cancelled. Further milestone progression is stopped.'}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 💰 FEATURE 4: "YOU SAVED ₹X" BENCHMARK COMPARISON */}
-      {/* ========================================================================= */}
-      {savingsAgainstMedian !== null && benchmark && (
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-50 via-[#EBF4F3] to-teal-50 border-2 border-emerald-300 shadow-sm flex items-start gap-3.5">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
-            <IndianRupee className="w-5 h-5" />
-          </div>
-          <div className="space-y-1 min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-700 text-white shadow-xs">
-                You Saved ₹{savingsAgainstMedian}
-              </span>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">
-                Benchmark Comparison
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-[#152220] font-medium leading-relaxed">
-              Your agreed service fare of <strong>₹{acceptedPrice}</strong> is <strong>₹{savingsAgainstMedian} below</strong> the local median benchmark of <strong>₹{benchmark.medianPriceInr}</strong> for {job.category} in {job.city}.
-            </p>
-            <p className="text-[10px] text-[#576563]">
-              * Comparison based on Sahayak local median price benchmarks for this trade and area. Not a guaranteed market saving.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* ⭐ FEATURE 5: REVIEWS AND RATINGS (Customer Review Card) */}
-      {/* ========================================================================= */}
-      {isJobCompleted && (
-        <div className="bg-white rounded-3xl border border-[#BCE5DA] p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <h3 className="text-base font-bold text-[#152220] flex items-center gap-2">
-                <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
-                <span>Service Rating &amp; Review</span>
+      {/* Main 2-Column Responsive Layout: Left Sidebar for Job Details & Timeline, Right Area for People & Tracking */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* ========================================================================= */}
+        {/* LEFT COLUMN: JOB OVERVIEW & TIMELINE (Reference Sidebar) */}
+        {/* ========================================================================= */}
+        <div className="w-full lg:w-[350px] xl:w-[380px] shrink-0 space-y-4 lg:sticky lg:top-6">
+          {/* FEATURE 3: JOB STATUS TIMELINE */}
+          <div className="bg-white rounded-2xl border border-[#E5DFD2] p-4 sm:p-5 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-[#152220] flex items-center gap-2">
+                <Compass className="w-4 h-4 text-[#217E66]" />
+                <span>Service Progress Timeline</span>
               </h3>
-              <p className="text-xs text-[#576563]">
-                {review
-                  ? 'Your verified customer feedback recorded for this completed job.'
-                  : `Rate your experience with ${cleanDisplayName(booking?.workerName) || 'your assigned professional'}.`}
-              </p>
-            </div>
-            {review && (
-              <Badge variant="green" className="flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Verified Review Submitted</span>
-              </Badge>
-            )}
-          </div>
-
-          {review ? (
-            /* Display Submitted Review */
-            <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-amber-500">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={`w-4 h-4 ${
-                        star <= (review.rating_overall || review.rating)
-                          ? 'fill-amber-400 text-amber-400'
-                          : 'text-gray-300'
-                      }`}
-                    />
-                  ))}
-                  <span className="text-xs font-bold text-[#152220] ml-1">
-                    {(review.rating_overall || review.rating)} / 5 Stars
-                  </span>
-                </div>
-                <span className="text-[11px] text-[#83928E]">
-                  Submitted on {new Date(review.created_at).toLocaleDateString()}
-                </span>
-              </div>
-
-              {review.review_text ? (
-                <p className="text-xs text-[#152220] italic bg-white p-3 rounded-xl border border-gray-200">
-                  &ldquo;{review.review_text}&rdquo;
-                </p>
+              {isJobCancelled ? (
+                <Badge variant="red" className="flex items-center gap-1 w-fit text-[10px] py-0.5 px-2">
+                  <XCircle className="w-3 h-3" />
+                  <span>Job Cancelled</span>
+                </Badge>
+              ) : isJobCompleted ? (
+                <Badge variant="green" className="flex items-center gap-1 w-fit text-[10px] py-0.5 px-2">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Job Completed</span>
+                </Badge>
               ) : (
-                <p className="text-xs text-[#83928E] italic">No written comment provided.</p>
-              )}
-
-              <p className="text-[10px] text-[#83928E]">
-                ⭐ This verified rating contributes directly to {cleanDisplayName(booking?.workerName) || 'the worker'}&apos;s public reputation on Sahayak.
-              </p>
-            </div>
-          ) : (
-            /* Review Submission Form */
-            <form onSubmit={handleSubmitReview} className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] space-y-3.5">
-              {reviewSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{reviewSuccess}</span>
-                </div>
-              )}
-
-              {reviewError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                  <span>{reviewError}</span>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#152220] block">
-                  Select Rating (1 to 5 Stars) <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setUserRating(star)}
-                      className="p-1 rounded-lg hover:scale-110 transition-transform focus:outline-none"
-                    >
-                      <Star
-                        className={`w-7 h-7 ${
-                          star <= userRating
-                            ? 'fill-amber-400 text-amber-400 drop-shadow-xs'
-                            : 'text-gray-300 hover:text-amber-200'
-                        }`}
-                      />
-                    </button>
-                  ))}
-                  <span className="text-xs font-extrabold text-[#0D4A52] ml-2">
-                    {userRating === 5
-                      ? '5 - Excellent'
-                      : userRating === 4
-                      ? '4 - Very Good'
-                      : userRating === 3
-                      ? '3 - Average'
-                      : userRating === 2
-                      ? '2 - Poor'
-                      : '1 - Terrible'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-[#152220] block">
-                  Review Comment (Optional)
-                </label>
-                <textarea
-                  rows={3}
-                  value={reviewComment}
-                  onChange={(e) => setReviewComment(e.target.value)}
-                  placeholder="Share details about punctuality, work quality, behavior, or resolution..."
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D4A52] outline-none bg-white"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[10px] text-[#83928E]">
-                  🔒 Enforced 1 verified review per completed job.
-                </span>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  type="submit"
-                  disabled={isSubmittingReview}
-                  className="text-xs font-bold gap-1.5 bg-[#0D4A52] hover:bg-[#072F35]"
-                >
-                  {isSubmittingReview ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Submitting Review...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Star className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
-                      <span>Submit Verified Review</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 🚀 ACTIVE BOOKING & TRACKING EXPERIENCE (Uber/Rapido style) */}
-      {/* ========================================================================= */}
-      {booking && (
-        <div className="bg-white rounded-3xl border-2 border-[#0D4A52] shadow-xl overflow-hidden transition-all">
-          {/* Top Status Header */}
-          <div className="bg-[#0D4A52] text-white p-5 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                      booking.stage === 'requested'
-                        ? 'bg-amber-400 text-amber-950 font-black'
-                        : 'bg-white/20 text-white'
-                    }`}
-                  >
-                    {booking.stage === 'requested'
-                      ? 'Awaiting Partner Confirmation'
-                      : 'Direct Booking Confirmed'}
-                  </span>
-                </div>
-                <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-                  {booking.stage === 'requested' && `Booking Request Sent to ${cleanDisplayName(booking.workerName)}`}
-                  {booking.stage === 'accepted' && `${cleanDisplayName(booking.workerName)} is Confirmed`}
-                  {booking.stage === 'on_the_way' && `${cleanDisplayName(booking.workerName)} is On The Way`}
-                  {booking.stage === 'arrived' && `${cleanDisplayName(booking.workerName)} Has Arrived!`}
-                  {booking.stage === 'in_progress' && 'Service Currently In Progress'}
-                  {booking.stage === 'completed' && 'Service Successfully Completed'}
-                  {booking.stage === 'cancelled' && 'Booking Cancelled'}
-                </h2>
-                <p className="text-xs text-white/80">
-                  {booking.stage === 'requested'
-                    ? 'Waiting for the worker partner to accept your booking offer. Page synchronizes automatically.'
-                    : booking.stage === 'arrived'
-                    ? 'Please share your 4-digit start OTP with the professional.'
-                    : `Estimated arrival travel time: ~${remainingMinutes > 0 ? remainingMinutes : travelMinutes} mins.`}
-                </p>
-              </div>
-
-              {/* Action Buttons: Call, Chat & Cancel */}
-              <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                {booking.stage !== 'completed' && booking.stage !== 'cancelled' ? (
-                  <>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleCallWorker}
-                      className="gap-1.5 text-xs font-bold shadow-sm"
-                    >
-                      <Phone className="w-3.5 h-3.5 text-[#0D4A52]" />
-                      <span>Call Worker</span>
-                    </Button>
-
-                    <Button
-                      variant="accent"
-                      size="sm"
-                      onClick={() => setShowChatDrawer(true)}
-                      className="gap-1.5 text-xs font-bold shadow-sm bg-[#217E66] hover:bg-[#19604e]"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Message Worker</span>
-                    </Button>
-
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedCancelReason('');
-                        setCustomCancelReason('');
-                        setCancelError(null);
-                        setShowCancelModal(true);
-                      }}
-                      className="gap-1.5 text-xs font-bold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 border border-red-200 shadow-sm"
-                    >
-                      <XCircle className="w-3.5 h-3.5 text-red-600" />
-                      <span>Cancel Booking</span>
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowChatDrawer(true)}
-                    className="gap-1.5 text-xs font-bold shadow-sm"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>View Chat</span>
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Uber/Rapido Stage Progress Stepper */}
-            <div className="mt-6 pt-5 border-t border-white/15">
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-                {BOOKING_STEPS.map((step, idx) => {
-                  const stepIndex = BOOKING_STEPS.findIndex((s) => s.stage === booking.stage);
-                  const isCurrent = step.stage === booking.stage;
-                  const isCompleted = stepIndex > idx;
-
-                  return (
-                    <div
-                      key={step.stage}
-                      className={`p-2.5 rounded-xl text-center transition-all ${
-                        isCurrent
-                          ? 'bg-white text-[#0D4A52] font-bold shadow-md scale-105'
-                          : isCompleted
-                          ? 'bg-white/10 text-white/90 border border-white/20'
-                          : 'bg-black/10 text-white/40'
-                      }`}
-                    >
-                      <div className="flex items-center justify-center gap-1 mb-1">
-                        {isCompleted ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        ) : isCurrent ? (
-                          <div className="w-2 h-2 rounded-full bg-[#217E66] animate-ping" />
-                        ) : (
-                          <span className="text-[10px] opacity-60 font-mono">{idx + 1}</span>
-                        )}
-                        <span className="text-xs truncate">{step.label}</span>
-                      </div>
-                      <p className="text-[10px] truncate opacity-80">{step.description}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Cancellation Alerts & Notifications */}
-          {cancelSuccessMsg && (
-            <div className="p-4 mx-6 mt-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-semibold">{cancelSuccessMsg}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCancelSuccessMsg(null)}
-                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {booking.stage === 'cancelled' && (
-            <div className="p-5 mx-6 mt-4 rounded-2xl bg-red-50/90 border border-red-200 text-red-900 text-xs flex items-start gap-3 shadow-sm">
-              <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-              <div className="space-y-1.5 flex-1">
-                <h4 className="font-bold text-red-950 text-sm">Booking Cancelled / Declined</h4>
-                <p className="text-[#576563]">
-                  <strong>Reason:</strong> {booking.cancellationReason || 'No specific reason provided.'}
-                </p>
-                <p className="text-[11px] text-red-700 leading-relaxed">
-                  Worker assignment has been released. You can select another professional partner from the marketplace below.
-                </p>
-                <div className="pt-1.5">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="text-xs font-bold bg-[#0D4A52] hover:bg-[#152220] text-white"
-                    onClick={() => {
-                      setBooking(null);
-                      setCustomerOtp(null);
-                    }}
-                  >
-                    Select Another Professional
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Details Body */}
-          <div className="p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Worker Profile Card */}
-              <div className="md:col-span-1 p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] flex flex-col justify-between space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-full bg-[#EBF4F3] border-2 border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-lg overflow-hidden shrink-0">
-                    {booking.workerAvatarUrl ? (
-                      <img
-                        src={booking.workerAvatarUrl}
-                        alt={cleanDisplayName(booking.workerName)}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      cleanDisplayName(booking.workerName)
-                        .split(' ')
-                        .map((n) => n[0])
-                        .slice(0, 2)
-                        .join('')
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-[#152220]">{cleanDisplayName(booking.workerName)}</h3>
-                    <p className="text-xs text-[#217E66] font-semibold capitalize">
-                      {formatWorkerCategory(booking.workerCategory)} Professional
-                    </p>
-                    <div className="flex items-center gap-1 text-amber-600 font-bold text-xs mt-1">
-                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                      <span>{booking.workerRating?.toFixed(1) || '5.0'}</span>
-                      <span className="text-[#83928E] font-normal text-[11px]">
-                        ({booking.workerExperience} yrs experience)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-[#E5DFD2] space-y-1 text-xs">
-                  <div className="flex justify-between text-[#576563]">
-                    <span>Agreed Service Fare:</span>
-                    <span className="font-bold text-[#152220] text-sm">₹{booking.agreedPriceInr}</span>
-                  </div>
-                  <div className="flex justify-between text-[#576563]">
-                    <span>Service Destination:</span>
-                    <span className="font-semibold text-[#152220] truncate max-w-[160px]">
-                      {job.city} ({job.pincode})
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Arrival Security & OTP Badge */}
-              <div className="md:col-span-1 p-4 rounded-2xl bg-gradient-to-br from-[#EBF4F3] to-[#FAF9F5] border border-[#BCE5DA] flex flex-col justify-between space-y-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#0D4A52]">
-                    <KeyRound className="w-4 h-4 text-[#217E66]" />
-                    <span>SERVICE START OTP CODE</span>
-                  </div>
-                  <p className="text-[11px] text-[#576563] leading-relaxed">
-                    <strong>NOTE:</strong> Share this 4-digit code verbally with the professional <strong>only</strong> when they physically arrive at your location.
-                  </p>
-                </div>
-
-                {customerOtp ? (
-                  <div className="p-3 bg-white rounded-xl border-2 border-dashed border-[#217E66] text-center space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#576563] block">
-                      Customer Secret OTP
-                    </span>
-                    <div className="flex justify-center gap-2 py-1 font-mono text-2xl font-black text-[#0D4A52] tracking-widest">
-                      {customerOtp.split('').map((digit, i) => (
-                        <span
-                          key={i}
-                          className="w-10 h-10 rounded-lg bg-[#FAF8F3] border border-[#BCE5DA] flex items-center justify-center shadow-inner"
-                        >
-                          {digit}
-                        </span>
-                      ))}
-                    </div>
-                    {booking.otpVerified ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        Verified on arrival
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-medium block">
-                        Awaiting worker arrival verification
-                      </span>
-                    )}
-                  </div>
-                ) : booking.stage === 'requested' ? (
-                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-center space-y-1.5">
-                    <div className="flex items-center justify-center gap-1.5 text-amber-900 font-bold text-xs">
-                      <Clock className="w-4 h-4 text-amber-700 animate-spin" />
-                      <span>Offer Sent • Awaiting Partner Response</span>
-                    </div>
-                    <p className="text-[11px] text-amber-800 leading-relaxed">
-                      Your 4-digit start OTP will appear here as soon as <strong>{cleanDisplayName(booking.workerName)}</strong> accepts your service request.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-white rounded-xl border border-gray-200 text-center text-xs text-[#576563]">
-                    {booking.otpVerified ? (
-                      <div className="flex items-center justify-center gap-1.5 text-emerald-700 font-bold">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>OTP verified at start</span>
-                      </div>
-                    ) : (
-                      <span>Code issued on booking. Only authorized customer can view code.</span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Travel ETA & Tracking Card */}
-              <div className="md:col-span-1 p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] flex flex-col justify-between space-y-3">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#152220] flex items-center gap-1.5">
-                      <Navigation className="w-4 h-4 text-[#217E66]" />
-                      <span>Estimated Arrival</span>
-                    </span>
-                    <Badge variant={
-                      booking.stage === 'cancelled'
-                        ? 'red'
-                        : booking.stage === 'requested' && !booking.isDemoWorker
-                        ? 'amber'
-                        : booking.stage === 'arrived'
-                        ? 'green'
-                        : 'amber'
-                    }>
-                      {booking.stage === 'cancelled'
-                        ? 'CANCELLED'
-                        : booking.stage === 'requested' && !booking.isDemoWorker
-                        ? 'WAITING CONFIRMATION'
-                        : booking.stage === 'arrived'
-                        ? 'ARRIVED'
-                        : `${remainingMinutes > 0 ? remainingMinutes : travelMinutes} MINS`}
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-[#576563] leading-relaxed">
-                    {booking.stage === 'requested' && !booking.isDemoWorker
-                      ? 'Waiting for worker partner to confirm the booking request. Estimated travel time will activate once confirmed.'
-                      : 'Estimated arrival based on distance and average urban transit. Actual traffic and routes may differ.'}
-                  </p>
-                </div>
-
-                <div className="p-3 bg-white rounded-xl border border-[#E5DFD2] space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#576563] flex items-center gap-1">
-                      <Timer className="w-3.5 h-3.5 text-[#217E66]" />
-                      <span>{booking.stage === 'requested' && !booking.isDemoWorker ? 'Status:' : 'Countdown:'}</span>
-                    </span>
-                    <span className="font-mono font-bold text-[#0D4A52]">
-                      {booking.stage === 'requested' && !booking.isDemoWorker
-                        ? 'Waiting for Confirmation'
-                        : booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed' || booking.stage === 'cancelled'
-                        ? '00:00'
-                        : `${Math.floor(simulatedCountdown / 60)
-                            .toString()
-                            .padStart(2, '0')}:${(simulatedCountdown % 60).toString().padStart(2, '0')}`}
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-1000 ${
-                        booking.stage === 'cancelled'
-                          ? 'bg-red-400'
-                          : booking.stage === 'requested' && !booking.isDemoWorker
-                          ? 'bg-amber-300'
-                          : 'bg-[#217E66]'
-                      }`}
-                      style={{
-                        width:
-                          booking.stage === 'cancelled'
-                            ? '0%'
-                            : booking.stage === 'requested' && !booking.isDemoWorker
-                            ? '0%'
-                            : booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed'
-                            ? '100%'
-                            : `${Math.min(100, Math.max(10, 100 - (simulatedCountdown / (travelMinutes * 60)) * 100))}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {booking.stage === 'cancelled' && (
-                  <div className="text-[10px] text-red-700 font-semibold">
-                    🛑 {booking.cancellationReason ? `Request declined: ${booking.cancellationReason}` : 'Booking cancelled.'}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Broadcast Success & Job Summary Banner */}
-      <div className="bg-white rounded-2xl border border-[#BCE5DA] p-6 shadow-sm space-y-5">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                {job.category}
-              </span>
-              <Badge variant={job.urgency === 'emergency' ? 'amber' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'teal' : 'neutral'}>
-                Status : {job.urgency === 'emergency' ? 'Emergency' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'Same Day' : 'Standard'}
-              </Badge>
-              {bidsCount > 0 && (
-                <Badge variant="teal">
-                  {bidsCount} Bid{bidsCount > 1 ? 's' : ''} Received
+                <Badge variant="teal" className="flex items-center gap-1 w-fit text-[10px] py-0.5 px-2">
+                  <Clock className="w-3 h-3" />
+                  <span>In Progress</span>
                 </Badge>
               )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-[#152220] tracking-tight">
-              {job.title}
-            </h1>
-          </div>
-        </div>
 
-        <p className="text-xs sm:text-sm text-[#576563] leading-relaxed">
-          {job.description}
-        </p>
+            {/* Milestone Steps: Vertical stack */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-1 gap-2 pt-0.5">
+              {timelineMilestones.map((ms, idx) => {
+                const isCompleted = ms.status === 'completed';
+                const isCurrent = ms.status === 'current';
 
-        {/* Location & Budget Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
-          <div className="flex items-center gap-2 text-[#576563]">
-            <MapPin className="w-4 h-4 text-[#217E66] shrink-0" />
-            <span className="truncate">
-              {job.address_line}, {job.city} ({job.pincode})
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-[#576563]">
-            <IndianRupee className="w-4 h-4 text-[#217E66] shrink-0" />
-            <span>
-              {job.estimated_min_price_inr
-                ? `₹${job.estimated_min_price_inr} - ₹${job.estimated_max_price_inr || job.estimated_min_price_inr}`
-                : 'Budget Flexible'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-[#576563]">
-            <Calendar className="w-4 h-4 text-[#217E66] shrink-0" />
-            <span className="truncate font-medium text-[#0D4A52]">
-              {job.scheduled_time_slot ? `${job.scheduled_date ? `${job.scheduled_date} • ` : ''}${job.scheduled_time_slot}` : 'Flexible timing'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-[#576563]">
-            <Clock className="w-4 h-4 text-[#217E66] shrink-0" />
-            <span>Posted {new Date(job.created_at).toLocaleDateString()}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Quotes & Bids Section */}
-      {bids.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-500" />
-              <span>Quotes Received ({bids.length})</span>
-            </h2>
-            <Badge variant="teal">Fair Pricing Policy Compliant</Badge>
-          </div>
-
-          {bidAcceptError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{bidAcceptError}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {bids.map((b) => {
-              const workerName = cleanDisplayName(b.worker?.full_name);
-              const isAccepted = b.status === 'accepted';
-              return (
-                <Card
-                  key={b.id}
-                  className={`p-5 space-y-4 flex flex-col justify-between hover:shadow-md transition-shadow ${
-                    isAccepted ? 'ring-2 ring-[#0D4A52] bg-emerald-50/20' : ''
-                  }`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-11 h-11 rounded-full bg-[#EBF4F3] border border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-sm shrink-0 overflow-hidden">
-                        {b.worker?.avatar_url ? (
-                          <img
-                            src={b.worker.avatar_url}
-                            alt={workerName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          workerName.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <h4 className="text-sm font-bold text-[#152220] truncate">
-                            {workerName}
-                          </h4>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
-                            Verified
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-[#576563] mt-0.5">
-                          {b.worker?.primary_city || 'Mumbai'} • Professional Partner
+                return (
+                  <div
+                    key={ms.id}
+                    className={`p-2 sm:p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 ${
+                      isCurrent
+                        ? 'bg-[#EBF4F3] border-[#217E66] text-[#0D4A52] shadow-xs ring-1 ring-[#217E66]'
+                        : isCompleted
+                        ? 'bg-[#FAF9F5] border-[#BCE5DA] text-[#152220]'
+                        : 'bg-gray-50/60 border-gray-200 text-gray-400 opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {isCompleted ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : isCurrent ? (
+                        <div className="w-2 h-2 rounded-full bg-[#217E66] animate-ping shrink-0" />
+                      ) : (
+                        <span className="text-[11px] font-mono text-gray-400 font-bold w-4 text-center shrink-0">{idx + 1}</span>
+                      )}
+                      <div className="min-w-0 text-left">
+                        <span className={`text-xs font-bold block truncate leading-tight ${isCurrent ? 'text-[#0D4A52]' : isCompleted ? 'text-[#152220]' : 'text-gray-400'}`}>
+                          {ms.label}
+                        </span>
+                        <p className="text-[10px] leading-tight text-[#576563] truncate">
+                          {ms.subtitle}
                         </p>
                       </div>
                     </div>
-
-                    <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2] flex items-center justify-between">
-                      <span className="text-xs text-[#576563]">Offered Quote</span>
-                      <span className="text-base font-extrabold text-[#0D4A52]">
-                        ₹{b.offered_amount_inr}
-                      </span>
-                    </div>
-
-                    {b.note && (
-                      <p className="text-xs text-[#576563] italic line-clamp-2">
-                        &ldquo;{b.note}&rdquo;
-                      </p>
+                    {isCompleted && (
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">Done</span>
+                    )}
+                    {isCurrent && (
+                      <span className="text-[9px] font-bold text-[#0D4A52] bg-white px-1.5 py-0.5 rounded shadow-xs shrink-0">Active</span>
                     )}
                   </div>
-
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={
-                      isAccepted ||
-                      acceptingBidId !== null ||
-                      (booking !== null && booking.stage !== 'completed' && booking.stage !== 'cancelled')
-                    }
-                    onClick={() => handleAcceptBid(b.id)}
-                    className="w-full text-xs font-bold justify-center bg-[#0D4A52] hover:bg-[#072F35]"
-                  >
-                    {isAccepted ? 'Accepted' : acceptingBidId === b.id ? 'Accepting...' : 'Accept Quote'}
-                  </Button>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Nearby Worker Discovery Section */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
-              <Compass className="w-5 h-5 text-[#0D4A52]" />
-              <span>Available Neighborhood {job.category.toUpperCase()} Professionals</span>
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#576563]">Search Radius:</span>
-            <select
-              value={searchRadius}
-              onChange={(e) => setSearchRadius(parseInt(e.target.value, 10))}
-              className="text-xs font-semibold py-1.5 px-2.5 rounded-lg border border-[#E5DFD2] bg-white text-[#0D4A52] focus:ring-1 focus:ring-[#0D4A52] outline-none"
-            >
-              <option value="5000">5 km</option>
-              <option value="15000">15 km (Default)</option>
-              <option value="30000">30 km (Wider)</option>
-              <option value="50000">50 km (Regional)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Worker Discovery Results */}
-        {loadingWorkers ? (
-          <div className="py-12 bg-white rounded-2xl border border-dashed border-[#E5DFD2] text-center space-y-3">
-            <Loader2 className="w-6 h-6 animate-spin text-[#0D4A52] mx-auto" />
-            <p className="text-xs text-[#576563]">
-              Scanning PostGIS spatial radius for verified {job.category} workers...
-            </p>
-          </div>
-        ) : workers.length === 0 ? (
-          /* Empty State */
-          <div className="p-8 bg-white rounded-2xl border border-[#E5DFD2] text-center space-y-4 shadow-sm">
-            <div className="w-12 h-12 rounded-full bg-[#FAF8F3] text-[#0D4A52] flex items-center justify-center mx-auto border border-[#E5DFD2]">
-              <Compass className="w-6 h-6 text-[#217E66]" />
-            </div>
-            <div className="space-y-1 max-w-md mx-auto">
-              <h3 className="text-base font-bold text-[#152220]">
-                No Active {job.category} Professionals Found within {(searchRadius / 1000).toFixed(0)} km
-              </h3>
-              <p className="text-xs text-[#576563] leading-relaxed">
-                Your request is broadcasted live on the marketplace. As workers come online, they will place quotes. You can also widen your search radius below.
-              </p>
+                );
+              })}
             </div>
 
-            <div className="pt-2 flex flex-wrap justify-center gap-2.5">
-              {searchRadius < 50000 && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setSearchRadius((prev) => Math.min(50000, prev + 15000))}
-                  className="gap-1.5 text-xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Expand Search Radius to {((searchRadius + 15000) / 1000).toFixed(0)} km</span>
-                </Button>
+            {/* Cancelled Banner */}
+            {isJobCancelled && (
+              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-900 text-[11px] flex items-start gap-2">
+                <XCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold">Cancellation Notice:</span>
+                  <p className="text-red-800">
+                    {booking?.cancellationReason || 'This service request was cancelled. Further milestone progression is stopped.'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Broadcast Success & Job Summary Banner */}
+          <div className="bg-white rounded-2xl border border-[#BCE5DA] p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  {job.category}
+                </span>
+                <Badge variant={job.urgency === 'emergency' ? 'amber' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'teal' : 'neutral'} className="text-[10px] py-0.5 px-2">
+                  Status : {job.urgency === 'emergency' ? 'Emergency' : (job.urgency === 'same_day' || job.urgency === 'urgent') ? 'Same Day' : 'Standard'}
+                </Badge>
+                {bidsCount > 0 && (
+                  <Badge variant="teal" className="text-[10px] py-0.5 px-2">
+                    {bidsCount} Bid{bidsCount > 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </div>
+              <h1 className="text-lg sm:text-xl font-extrabold text-[#152220] tracking-tight leading-snug">
+                {job.title}
+              </h1>
+              {job.description && (
+                <p className="text-xs text-[#576563] leading-relaxed line-clamp-2">
+                  {job.description}
+                </p>
               )}
-              <Link href="/post-job">
-                <Button variant="primary" size="sm" className="text-xs">
-                  Create Service Request
-                </Button>
-              </Link>
+            </div>
+
+            {/* Location & Budget Badges (compact vertical stack) */}
+            <div className="space-y-2 pt-2.5 border-t border-gray-100 text-xs">
+              <div className="flex items-start gap-1.5 text-[#576563]">
+                <MapPin className="w-4 h-4 text-[#217E66] shrink-0 mt-0.5" />
+                <span className="leading-tight truncate">
+                  {job.address_line}, {job.city} ({job.pincode})
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-[#576563]">
+                <IndianRupee className="w-4 h-4 text-[#217E66] shrink-0" />
+                <span className="font-semibold text-[#152220]">
+                  {job.estimated_min_price_inr
+                    ? `₹${job.estimated_min_price_inr} - ₹${job.estimated_max_price_inr || job.estimated_min_price_inr}`
+                    : 'Budget Flexible'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-[#576563]">
+                <Calendar className="w-4 h-4 text-[#217E66] shrink-0" />
+                <span className="font-medium text-[#0D4A52] truncate">
+                  {job.scheduled_time_slot ? `${job.scheduled_date ? `${job.scheduled_date} • ` : ''}${job.scheduled_time_slot}` : 'Flexible timing'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-[#83928E]">
+                <Clock className="w-4 h-4 text-[#217E66] shrink-0" />
+                <span>Posted {new Date(job.created_at).toLocaleDateString()}</span>
+              </div>
             </div>
           </div>
-        ) : (
-          /* Worker Grid */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {workers.map((w) => {
-              const distanceKm = w.distance_meters != null ? (w.distance_meters / 1000).toFixed(1) : null;
-              const travelCalc = calculateEstimatedTravelTimeMinutes(w.distance_meters || 2500);
-              const isAssignedToThis = booking?.workerId === w.worker_id;
-              const isDemo = w.is_demo || w.worker_source === 'demo';
+        </div>
 
-              return (
-                <Card
-                  key={w.worker_id}
-                  className={`p-5 space-y-4 flex flex-col justify-between hover:shadow-md transition-shadow ${
-                    isAssignedToThis ? 'ring-2 ring-[#0D4A52] bg-emerald-50/20' : ''
-                  }`}
-                >
-                  <div className="space-y-3">
-                    {/* Worker Header */}
-                    <div className="flex items-start gap-3">
-                      <div className="w-11 h-11 rounded-full bg-[#EBF4F3] border border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-sm shrink-0">
-                        {w.avatar_url ? (
+        {/* ========================================================================= */}
+        {/* RIGHT COLUMN: THE PEOPLE, QUOTES & ACTIVE DISPATCH TRACKING */}
+        {/* ========================================================================= */}
+        <div className="flex-1 min-w-0 w-full space-y-6">
+          {/* ========================================================================= */}
+          {/* FEATURE 4: "YOU SAVED ₹X" BENCHMARK COMPARISON */}
+          {/* ========================================================================= */}
+          {savingsAgainstMedian !== null && benchmark && (
+            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-50 via-[#EBF4F3] to-teal-50 border-2 border-emerald-300 shadow-sm flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                <IndianRupee className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-700 text-white shadow-xs">
+                    You Saved ₹{savingsAgainstMedian}
+                  </span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">
+                    Benchmark Comparison
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-[#152220] font-medium leading-relaxed">
+                  Your agreed service fare of <strong>₹{acceptedPrice}</strong> is <strong>₹{savingsAgainstMedian} below</strong> the local median benchmark of <strong>₹{benchmark.medianPriceInr}</strong> for {job.category} in {job.city}.
+                </p>
+                <p className="text-[10px] text-[#576563]">
+                  * Comparison based on Sahayak local median price benchmarks for this trade and area. Not a guaranteed market saving.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* FEATURE 5: REVIEWS AND RATINGS (Customer Review Card) */}
+          {/* ========================================================================= */}
+          {isJobCompleted && (
+            <div className="bg-white rounded-3xl border border-[#BCE5DA] p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <h3 className="text-base font-bold text-[#152220] flex items-center gap-2">
+                    <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                    <span>Service Rating &amp; Review</span>
+                  </h3>
+                  <p className="text-xs text-[#576563]">
+                    {review
+                      ? 'Your verified customer feedback recorded for this completed job.'
+                      : `Rate your experience with ${cleanDisplayName(booking?.workerName) || 'your assigned professional'}.`}
+                  </p>
+                </div>
+                {review && (
+                  <Badge variant="green" className="flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Verified Review Submitted</span>
+                  </Badge>
+                )}
+              </div>
+
+              {review ? (
+                /* Display Submitted Review */
+                <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-amber-500">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`w-4 h-4 ${
+                            star <= (review.rating_overall || review.rating)
+                              ? 'fill-amber-400 text-amber-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                      <span className="text-xs font-bold text-[#152220] ml-1">
+                        {(review.rating_overall || review.rating)} / 5 Stars
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-[#83928E]">
+                      Submitted on {new Date(review.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  {review.review_text ? (
+                    <p className="text-xs text-[#152220] italic bg-white p-3 rounded-xl border border-gray-200">
+                      &ldquo;{review.review_text}&rdquo;
+                    </p>
+                  ) : (
+                    <p className="text-xs text-[#83928E] italic">No written comment provided.</p>
+                  )}
+
+                  <p className="text-[10px] text-[#83928E] flex items-center gap-1">
+                    <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
+                    <span>This verified rating contributes directly to {cleanDisplayName(booking?.workerName) || 'the worker'}&apos;s public reputation on Sahayak.</span>
+                  </p>
+                </div>
+              ) : (
+                /* Review Submission Form */
+                <form onSubmit={handleSubmitReview} className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] space-y-3.5">
+                  {reviewSuccess && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{reviewSuccess}</span>
+                    </div>
+                  )}
+
+                  {reviewError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>{reviewError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#152220] block">
+                      Select Rating (1 to 5 Stars) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setUserRating(star)}
+                          className="p-1 rounded-lg hover:scale-110 transition-transform focus:outline-none"
+                        >
+                          <Star
+                            className={`w-7 h-7 ${
+                              star <= userRating
+                                ? 'fill-amber-400 text-amber-400 drop-shadow-xs'
+                                : 'text-gray-300 hover:text-amber-200'
+                            }`}
+                          />
+                        </button>
+                      ))}
+                      <span className="text-xs font-extrabold text-[#0D4A52] ml-2">
+                        {userRating === 5
+                          ? '5 - Excellent'
+                          : userRating === 4
+                          ? '4 - Very Good'
+                          : userRating === 3
+                          ? '3 - Average'
+                          : userRating === 2
+                          ? '2 - Poor'
+                          : '1 - Terrible'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#152220] block">
+                      Review Comment (Optional)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      placeholder="Share details about punctuality, work quality, behavior, or resolution..."
+                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D4A52] outline-none bg-white"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] text-[#83928E]">
+                      Enforced 1 verified review per completed job.
+                    </span>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      type="submit"
+                      disabled={isSubmittingReview}
+                      className="text-xs font-bold gap-1.5 bg-[#0D4A52] hover:bg-[#072F35]"
+                    >
+                      {isSubmittingReview ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Submitting Review...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Star className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+                          <span>Submit Verified Review</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* ACTIVE BOOKING & TRACKING EXPERIENCE (Uber/Rapido style) */}
+          {/* ========================================================================= */}
+          {booking && (
+            <div className="bg-white rounded-3xl border-2 border-[#0D4A52] shadow-xl overflow-hidden transition-all">
+              {/* Top Status Header */}
+              <div className="bg-[#0D4A52] text-white p-5 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                          booking.stage === 'requested'
+                            ? 'bg-amber-400 text-amber-950 font-black'
+                            : 'bg-white/20 text-white'
+                        }`}
+                      >
+                        {booking.stage === 'requested'
+                          ? 'Awaiting Partner Confirmation'
+                          : 'Direct Booking Confirmed'}
+                      </span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+                      {booking.stage === 'requested' && `Booking Request Sent to ${cleanDisplayName(booking.workerName)}`}
+                      {booking.stage === 'accepted' && `${cleanDisplayName(booking.workerName)} is Confirmed`}
+                      {booking.stage === 'on_the_way' && `${cleanDisplayName(booking.workerName)} is On The Way`}
+                      {booking.stage === 'arrived' && `${cleanDisplayName(booking.workerName)} Has Arrived!`}
+                      {booking.stage === 'in_progress' && 'Service Currently In Progress'}
+                      {booking.stage === 'completed' && 'Service Successfully Completed'}
+                      {booking.stage === 'cancelled' && 'Booking Cancelled'}
+                    </h2>
+                    <p className="text-xs text-white/80">
+                      {booking.stage === 'arrived'
+                        ? 'Please share your 4-digit start OTP with the professional.'
+                        : `Estimated arrival travel time: ~${remainingMinutes > 0 ? remainingMinutes : travelMinutes} mins.`}
+                    </p>
+                  </div>
+
+                  {/* Action Buttons: Call, Chat & Cancel */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {booking.stage !== 'completed' && booking.stage !== 'cancelled' ? (
+                      <>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleCallWorker}
+                          className="gap-1.5 text-xs font-bold shadow-sm"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-[#0D4A52]" />
+                          <span>Call Worker</span>
+                        </Button>
+
+                        <Button
+                          variant="accent"
+                          size="sm"
+                          onClick={() => setShowChatDrawer(true)}
+                          className="gap-1.5 text-xs font-bold shadow-sm bg-[#217E66] hover:bg-[#19604e]"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Message Worker</span>
+                        </Button>
+
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCancelReason('');
+                            setCustomCancelReason('');
+                            setCancelError(null);
+                            setShowCancelModal(true);
+                          }}
+                          className="gap-1.5 text-xs font-bold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 border border-red-200 shadow-sm"
+                        >
+                          <XCircle className="w-3.5 h-3.5 text-red-600" />
+                          <span>Cancel Booking</span>
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setShowChatDrawer(true)}
+                        className="gap-1.5 text-xs font-bold shadow-sm"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>View Chat</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Uber/Rapido Stage Progress Stepper */}
+                <div className="mt-6 pt-5 border-t border-white/15">
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                    {BOOKING_STEPS.map((step, idx) => {
+                      const stepIndex = BOOKING_STEPS.findIndex((s) => s.stage === booking.stage);
+                      const isCurrent = step.stage === booking.stage;
+                      const isCompleted = stepIndex > idx;
+
+                      return (
+                        <div
+                          key={step.stage}
+                          className={`p-2.5 rounded-xl text-center transition-all ${
+                            isCurrent
+                              ? 'bg-white text-[#0D4A52] font-bold shadow-md scale-105'
+                              : isCompleted
+                              ? 'bg-white/10 text-white/90 border border-white/20'
+                              : 'bg-black/10 text-white/40'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1 mb-1">
+                            {isCompleted ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : isCurrent ? (
+                              <div className="w-2 h-2 rounded-full bg-[#217E66] animate-ping" />
+                            ) : (
+                              <span className="text-[10px] opacity-60 font-mono">{idx + 1}</span>
+                            )}
+                            <span className="text-xs truncate">{step.label}</span>
+                          </div>
+                          <p className="text-[10px] truncate opacity-80">{step.description}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Cancellation Alerts & Notifications */}
+              {cancelSuccessMsg && (
+                <div className="p-4 mx-6 mt-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="font-semibold">{cancelSuccessMsg}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCancelSuccessMsg(null)}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {booking.stage === 'cancelled' && (
+                <div className="p-5 mx-6 mt-4 rounded-2xl bg-red-50/90 border border-red-200 text-red-900 text-xs flex items-start gap-3 shadow-sm">
+                  <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-red-950 text-sm">Booking Cancelled</h4>
+                    <p className="text-[#576563]">
+                      <strong>Reason:</strong> {booking.cancellationReason || 'No specific reason provided.'}
+                    </p>
+                    <p className="text-[11px] text-red-700 leading-relaxed">
+                      Worker assignment and real-time tracking have been terminated. You can post a new request or book another professional from the marketplace at any time.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Details Body */}
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Worker Profile Card */}
+                  <div className="md:col-span-1 p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] flex flex-col justify-between space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-full bg-[#EBF4F3] border-2 border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-lg overflow-hidden shrink-0">
+                        {booking.workerAvatarUrl ? (
                           <img
-                            src={w.avatar_url}
-                            alt={cleanDisplayName(w.full_name)}
-                            className="w-full h-full rounded-full object-cover"
+                            src={booking.workerAvatarUrl}
+                            alt={cleanDisplayName(booking.workerName)}
+                            className="w-full h-full object-cover"
                           />
                         ) : (
-                          cleanDisplayName(w.full_name)
+                          cleanDisplayName(booking.workerName)
                             .split(' ')
                             .map((n) => n[0])
                             .slice(0, 2)
                             .join('')
-                            .toUpperCase()
                         )}
                       </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <h4 className="text-sm font-bold text-[#152220] truncate">
-                            {cleanDisplayName(w.full_name)}
-                          </h4>
-                          {w.distance_pending || distanceKm == null ? (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
-                              📍 Location Pending
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
-                              {distanceKm} km
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Hybrid Real vs Demo Badges */}
-                        <div className="flex items-center gap-1 mt-1 flex-wrap">
-                          {isDemo ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wide">
-                              Demo Profile
-                            </span>
-                          ) : (
-                            <>
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wide">
-                                Real Worker
-                              </span>
-                              {w.is_cross_service_demo && (
-                                <span
-                                  className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 uppercase tracking-wide"
-                                  title="Demonstration partner available across all service categories using the genuine real-worker booking workflow"
-                                >
-                                  Cross-Service Demo
-                                </span>
-                              )}
-                              {w.email_verified && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 uppercase tracking-wide">
-                                  Verified Email
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 text-[11px] text-[#576563] mt-1">
-                          <span className="capitalize">{formatWorkerCategory(w.primary_category, w.skills)}</span>
-                          <span>•</span>
-                          <span>{w.years_experience} yrs exp</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Reputation & Stats */}
-                    <div className="flex items-center justify-between py-2 border-y border-gray-100 text-xs">
-                      <div className="flex items-center gap-1">
-                        {w.review_count && w.review_count > 0 && w.average_rating ? (
-                          <div className="flex items-center gap-1 text-amber-600 font-bold">
-                            <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                            <span>{w.average_rating.toFixed(1)}</span>
-                            <span className="text-[10px] text-[#83928E] font-normal">
-                              ({w.review_count} {w.review_count === 1 ? 'review' : 'reviews'})
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Star className="w-3 h-3 text-teal-600 fill-teal-600" />
-                            ★ New Partner (0 Jobs)
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-1 text-[11px] text-[#0D4A52] font-semibold">
-                        <Clock className="w-3 h-3 text-[#217E66]" />
-                        <span>
-                          {w.distance_pending || w.distance_meters == null
-                            ? 'On Request'
-                            : `~${travelCalc.minutes} mins arrival`}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Bio Snippet */}
-                    {w.bio && (
-                      <p className="text-xs text-[#576563] line-clamp-2 leading-relaxed">
-                        {w.bio}
-                      </p>
-                    )}
-
-                    {/* Skills pills */}
-                    {w.skills && w.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {w.skills.slice(0, 3).map((skill, idx) => (
-                          <span
-                            key={idx}
-                            className="text-[10px] px-2 py-0.5 rounded-full bg-[#FAF9F5] text-[#576563] border border-[#E5DFD2]"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Worker Personalized Quote */}
-                    <div className="flex items-center justify-between p-2.5 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2]">
                       <div>
-                        <span className="text-[11px] text-[#576563] font-medium block">Service Quote</span>
-                        <span className="text-[9px] text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                          Fair Price Verified
-                        </span>
+                        <h3 className="text-base font-bold text-[#152220]">{cleanDisplayName(booking.workerName)}</h3>
+                        <p className="text-xs text-[#217E66] font-semibold capitalize">
+                          {formatWorkerCategory(booking.workerCategory)} Professional
+                        </p>
+                        <div className="flex items-center gap-1 text-amber-600 font-bold text-xs mt-1">
+                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                          <span>{booking.workerRating?.toFixed(1) || '5.0'}</span>
+                          <span className="text-[#83928E] font-normal text-[11px]">
+                            ({booking.workerExperience} yrs experience)
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-base font-extrabold text-[#0D4A52]">
-                          ₹{getWorkerQuote(w)}
+                    </div>
+
+                    <div className="pt-3 border-t border-[#E5DFD2] space-y-1 text-xs">
+                      <div className="flex justify-between text-[#576563]">
+                        <span>Agreed Service Fare:</span>
+                        <span className="font-bold text-[#152220] text-sm">₹{booking.agreedPriceInr}</span>
+                      </div>
+                      <div className="flex justify-between text-[#576563]">
+                        <span>Service Destination:</span>
+                        <span className="font-semibold text-[#152220] truncate max-w-[160px]">
+                          {job.city} ({job.pincode})
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Actions & Book Now Button */}
-                  <div className="space-y-2 pt-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="text-xs font-semibold justify-center"
-                        onClick={() => setActiveWorkerProfile(w)}
-                      >
-                        <Eye className="w-3.5 h-3.5 text-[#0D4A52]" />
-                        <span>View Profile</span>
-                      </Button>
+                  {/* Arrival Security & OTP Badge */}
+                  <div className="md:col-span-1 p-4 rounded-2xl bg-gradient-to-br from-[#EBF4F3] to-[#FAF9F5] border border-[#BCE5DA] flex flex-col justify-between space-y-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#0D4A52]">
+                        <KeyRound className="w-4 h-4 text-[#217E66]" />
+                        <span>SERVICE START OTP CODE</span>
+                      </div>
+                      <p className="text-[11px] text-[#576563] leading-relaxed">
+                        <strong>NOTE:</strong> Share this 4-digit code verbally with the professional <strong>only</strong> when they physically arrive at your location.
+                      </p>
+                    </div>
+
+                    {customerOtp ? (
+                      <div className="p-3 bg-white rounded-xl border-2 border-dashed border-[#217E66] text-center space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#576563] block">
+                          Customer Secret OTP
+                        </span>
+                        <div className="flex justify-center gap-2 py-1 font-mono text-2xl font-black text-[#0D4A52] tracking-widest">
+                          {customerOtp.split('').map((digit, i) => (
+                            <span
+                              key={i}
+                              className="w-10 h-10 rounded-lg bg-[#FAF8F3] border border-[#BCE5DA] flex items-center justify-center shadow-inner"
+                            >
+                              {digit}
+                            </span>
+                          ))}
+                        </div>
+                        {booking.otpVerified ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            Verified on arrival
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-medium block">
+                            Awaiting worker arrival verification
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-white rounded-xl border border-gray-200 text-center text-xs text-[#576563]">
+                        {booking.otpVerified ? (
+                          <div className="flex items-center justify-center gap-1.5 text-emerald-700 font-bold">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>OTP verified at start</span>
+                          </div>
+                        ) : (
+                          <span>Code issued on booking. Only authorized customer can view code.</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Travel ETA & Tracking Card */}
+                  <div className="md:col-span-1 p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] flex flex-col justify-between space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#152220] flex items-center gap-1.5">
+                          <Navigation className="w-4 h-4 text-[#217E66]" />
+                          <span>Estimated Arrival</span>
+                        </span>
+                        <Badge variant={booking.stage === 'cancelled' ? 'red' : booking.stage === 'arrived' ? 'green' : 'amber'}>
+                          {booking.stage === 'cancelled' ? 'CANCELLED' : booking.stage === 'arrived' ? 'ARRIVED' : `${remainingMinutes > 0 ? remainingMinutes : travelMinutes} MINS`}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-[#576563] leading-relaxed">
+                        Estimated arrival based on distance and average urban transit. Actual traffic and routes may differ.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-[#E5DFD2] space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[#576563] flex items-center gap-1">
+                          <Timer className="w-3.5 h-3.5 text-[#217E66]" />
+                          <span>Countdown:</span>
+                        </span>
+                        <span className="font-mono font-bold text-[#0D4A52]">
+                          {booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed' || booking.stage === 'cancelled'
+                            ? '00:00'
+                            : `${Math.floor(simulatedCountdown / 60)
+                                .toString()
+                                .padStart(2, '0')}:${(simulatedCountdown % 60).toString().padStart(2, '0')}`}
+                        </span>
+                      </div>
+
+                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-1000 ${booking.stage === 'cancelled' ? 'bg-red-400' : 'bg-[#217E66]'}`}
+                          style={{
+                            width:
+                              booking.stage === 'cancelled'
+                                ? '0%'
+                                : booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed'
+                                ? '100%'
+                                : `${Math.min(100, Math.max(10, 100 - (simulatedCountdown / (travelMinutes * 60)) * 100))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {booking.stage === 'cancelled' && (
+                      <div className="text-[10px] text-red-700 font-semibold">
+                        Tracking simulation ended due to cancellation.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Quotes & Bids Section */}
+          {bids.length > 0 && (!booking || booking.stage === 'cancelled') && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <span>Quotes Received ({bids.length})</span>
+                </h2>
+                <Badge variant="teal">Fair Pricing Policy Compliant</Badge>
+              </div>
+
+              {bidAcceptError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{bidAcceptError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {bids.map((b) => {
+                  const workerName = cleanDisplayName(b.worker?.full_name);
+                  const isAccepted = b.status === 'accepted';
+                  return (
+                    <Card
+                      key={b.id}
+                      className={`p-5 space-y-4 flex flex-col justify-between hover:shadow-md transition-shadow ${
+                        isAccepted ? 'ring-2 ring-[#0D4A52] bg-emerald-50/20' : ''
+                      }`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-11 h-11 rounded-full bg-[#EBF4F3] border border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-sm shrink-0 overflow-hidden">
+                            {b.worker?.avatar_url ? (
+                              <img
+                                src={b.worker.avatar_url}
+                                alt={workerName}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              workerName.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <h4 className="text-sm font-bold text-[#152220] truncate">
+                                {workerName}
+                              </h4>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                                Verified
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#576563] mt-0.5">
+                              {b.worker?.primary_city || 'Mumbai'} • Professional Partner
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2] flex items-center justify-between">
+                          <span className="text-xs text-[#576563]">Offered Quote</span>
+                          <span className="text-base font-extrabold text-[#0D4A52]">
+                            ₹{b.offered_amount_inr}
+                          </span>
+                        </div>
+
+                        {b.note && (
+                          <p className="text-xs text-[#576563] italic line-clamp-2">
+                            &ldquo;{b.note}&rdquo;
+                          </p>
+                        )}
+                      </div>
 
                       <Button
                         variant="primary"
                         size="sm"
-                        disabled={booking !== null && booking.stage !== 'completed' && booking.stage !== 'cancelled'}
-                        onClick={() => handleOpenBookingConfirm(w)}
-                        className="text-xs font-bold justify-center bg-[#0D4A52] hover:bg-[#072F35]"
+                        disabled={
+                          isAccepted ||
+                          acceptingBidId !== null ||
+                          (booking !== null && booking.stage !== 'completed' && booking.stage !== 'cancelled')
+                        }
+                        onClick={() => handleAcceptBid(b.id)}
+                        className="w-full text-xs font-bold justify-center bg-[#0D4A52] hover:bg-[#072F35]"
                       >
-                        <span>{isAssignedToThis ? 'Booked' : 'Book Now'}</span>
+                        {isAccepted ? 'Accepted' : acceptingBidId === b.id ? 'Accepting...' : 'Accept Quote'}
                       </Button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Nearby Worker Discovery Section ("the people and all") - hidden after active booking */}
+          {(!booking || booking.stage === 'cancelled') && (
+            <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
+                  <Compass className="w-5 h-5 text-[#0D4A52]" />
+                  <span>Available Neighborhood {job.category.toUpperCase()} Professionals</span>
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#576563]">Search Radius:</span>
+                <select
+                  value={searchRadius}
+                  onChange={(e) => setSearchRadius(parseInt(e.target.value, 10))}
+                  className="text-xs font-semibold py-1.5 px-2.5 rounded-lg border border-[#E5DFD2] bg-white text-[#0D4A52] focus:ring-1 focus:ring-[#0D4A52] outline-none"
+                >
+                  <option value="5000">5 km</option>
+                  <option value="15000">15 km (Default)</option>
+                  <option value="30000">30 km (Wider)</option>
+                  <option value="50000">50 km (Regional)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Worker Discovery Results */}
+            {loadingWorkers ? (
+              <div className="py-12 bg-white rounded-2xl border border-dashed border-[#E5DFD2] text-center space-y-3">
+                <Loader2 className="w-6 h-6 animate-spin text-[#0D4A52] mx-auto" />
+                <p className="text-xs text-[#576563]">
+                  Scanning PostGIS spatial radius for verified {job.category} workers...
+                </p>
+              </div>
+            ) : workers.length === 0 ? (
+              /* Empty State */
+              <div className="p-8 bg-white rounded-2xl border border-[#E5DFD2] text-center space-y-4 shadow-sm">
+                <div className="w-12 h-12 rounded-full bg-[#FAF8F3] text-[#0D4A52] flex items-center justify-center mx-auto border border-[#E5DFD2]">
+                  <Compass className="w-6 h-6 text-[#217E66]" />
+                </div>
+                <div className="space-y-1 max-w-md mx-auto">
+                  <h3 className="text-base font-bold text-[#152220]">
+                    No Active {job.category} Professionals Found within {(searchRadius / 1000).toFixed(0)} km
+                  </h3>
+                  <p className="text-xs text-[#576563] leading-relaxed">
+                    Your request is broadcasted live on the marketplace. As workers come online, they will place quotes. You can also widen your search radius below.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex flex-wrap justify-center gap-2.5">
+                  {searchRadius < 50000 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setSearchRadius((prev) => Math.min(50000, prev + 15000))}
+                      className="gap-1.5 text-xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Expand Search Radius to {((searchRadius + 15000) / 1000).toFixed(0)} km</span>
+                    </Button>
+                  )}
+                  <Link href="/post-job">
+                    <Button variant="primary" size="sm" className="text-xs">
+                      Create Service Request
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              /* Worker Grid: 2 columns on the right */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {workers.map((w) => {
+                  const distanceKm = w.distance_meters != null ? (w.distance_meters / 1000).toFixed(1) : null;
+                  const travelCalc = w.distance_meters != null ? calculateEstimatedTravelTimeMinutes(w.distance_meters) : null;
+                  const isAssignedToThis = booking?.workerId === w.worker_id;
+
+                  return (
+                    <Card
+                      key={w.worker_id}
+                      className={`p-5 space-y-4 flex flex-col justify-between hover:shadow-md transition-shadow ${
+                        isAssignedToThis ? 'ring-2 ring-[#0D4A52] bg-emerald-50/20' : ''
+                      }`}
+                    >
+                      <div className="space-y-3">
+                        {/* Worker Header */}
+                        <div className="flex items-start gap-3">
+                          <div className="w-11 h-11 rounded-full bg-[#EBF4F3] border border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-sm shrink-0">
+                            {w.avatar_url ? (
+                              <img
+                                src={w.avatar_url}
+                                alt={cleanDisplayName(w.full_name)}
+                                className="w-full h-full rounded-full object-cover"
+                              />
+                            ) : (
+                              cleanDisplayName(w.full_name)
+                                .split(' ')
+                                .map((n) => n[0])
+                                .slice(0, 2)
+                                .join('')
+                                .toUpperCase()
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <h4 className="text-sm font-bold text-[#152220] truncate">
+                                {cleanDisplayName(w.full_name)}
+                              </h4>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                                {distanceKm != null ? `${distanceKm} km` : 'Location Pending'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-[11px] text-[#576563] mt-0.5">
+                              <span className="capitalize">{formatWorkerCategory(w.primary_category, w.skills)}</span>
+                              <span>•</span>
+                              <span>{w.years_experience} yrs exp</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reputation & Stats */}
+                        <div className="flex items-center justify-between py-2 border-y border-gray-100 text-xs">
+                          <div className="flex items-center gap-1">
+                            {w.review_count && w.review_count > 0 && w.average_rating ? (
+                              <div className="flex items-center gap-1 text-amber-600 font-bold">
+                                <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                                <span>{w.average_rating.toFixed(1)}</span>
+                                <span className="text-[10px] text-[#83928E] font-normal">
+                                  ({w.review_count} {w.review_count === 1 ? 'review' : 'reviews'})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                <Star className="w-2.5 h-2.5 text-teal-600 fill-teal-600" />
+                                New Partner
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 text-[11px] text-[#0D4A52] font-semibold">
+                            <Clock className="w-3 h-3 text-[#217E66]" />
+                            <span>{travelCalc ? `~${travelCalc.minutes} mins arrival` : 'Location pending'}</span>
+                          </div>
+                        </div>
+
+                        {/* Bio Snippet */}
+                        {w.bio && (
+                          <p className="text-xs text-[#576563] line-clamp-2 leading-relaxed">
+                            {w.bio}
+                          </p>
+                        )}
+
+                        {/* Skills pills */}
+                        {w.skills && w.skills.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {w.skills.slice(0, 3).map((skill, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[10px] px-2 py-0.5 rounded-full bg-[#FAF9F5] text-[#576563] border border-[#E5DFD2]"
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Actual Cost & Book Now Bar */}
+                        <div className="flex items-center justify-between py-2 px-3 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2] gap-3">
+                          <div className="flex items-baseline gap-1.5 min-w-0">
+                            <span className="text-xs font-semibold text-[#576563] shrink-0">Actual Cost:</span>
+                            <span className="text-base font-black text-[#0D4A52] truncate">
+                              ₹{getWorkerQuote(w)}
+                            </span>
+                          </div>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={booking !== null && booking.stage !== 'completed' && booking.stage !== 'cancelled'}
+                            onClick={() => handleOpenBookingConfirm(w)}
+                            className="text-xs font-bold justify-center bg-[#0D4A52] hover:bg-[#072F35] px-4 py-2 rounded-xl shadow-xs shrink-0"
+                          >
+                            <span>{isAssignedToThis ? 'Booked' : 'Book Now'}</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 📋 STEP 1 CONFIRMATION MODAL: BOOK NOW */}
+      {/* STEP 1 MERGED CONFIRMATION MODAL: PROFILE & BOOK NOW */}
       {/* ========================================================================= */}
       {bookingConfirmWorker && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-[#E5DFD2] max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-6 animate-in zoom-in-95">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md modal-backdrop flex items-center justify-center p-4 animate-in fade-in"
+        >
+          <div className="bg-white rounded-3xl border border-[#E5DFD2] max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-xl font-black text-[#152220]">
-                  Confirm Worker Booking
+                  Confirm Professional Booking
                 </h3>
+                <p className="text-xs text-[#576563]">
+                  Review verified credentials, trade details, and confirm service dispatch.
+                </p>
               </div>
               <button
                 type="button"
@@ -1894,9 +1825,9 @@ function JobDiscoveryContent() {
               </button>
             </div>
 
-            {/* Selected Worker Overview */}
+            {/* Selected Worker Overview (Header with avatar, name, category, distance, verified) */}
             <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E5DFD2] flex items-center gap-3.5">
-              <div className="w-13 h-13 rounded-full bg-[#EBF4F3] border border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-base shrink-0 overflow-hidden">
+              <div className="w-14 h-14 rounded-full bg-[#EBF4F3] border-2 border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-base shrink-0 overflow-hidden">
                 {bookingConfirmWorker.avatar_url ? (
                   <img
                     src={bookingConfirmWorker.avatar_url}
@@ -1912,72 +1843,90 @@ function JobDiscoveryContent() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-1">
                   <h4 className="text-base font-bold text-[#152220] truncate">
                     {cleanDisplayName(bookingConfirmWorker.full_name)}
                   </h4>
-                  {bookingConfirmWorker.is_demo || bookingConfirmWorker.worker_source === 'demo' ? (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wide shrink-0">
-                      Demo Profile
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wide">
-                        Real Worker
-                      </span>
-                      {bookingConfirmWorker.is_cross_service_demo && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 uppercase tracking-wide">
-                          Cross-Service Demo
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <Badge variant="teal" className="text-[10px] shrink-0">
+                    Verified ID
+                  </Badge>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-[#576563] mt-0.5">
-                  <span className="capitalize">{formatWorkerCategory(bookingConfirmWorker.primary_category, bookingConfirmWorker.skills)}</span>
+                  <span className="capitalize">{formatWorkerCategory(bookingConfirmWorker.primary_category, bookingConfirmWorker.skills)} Professional</span>
                   <span>•</span>
-                  <span>
-                    {bookingConfirmWorker.distance_meters != null
-                      ? `${(bookingConfirmWorker.distance_meters / 1000).toFixed(1)} km away`
-                      : 'Location Pending'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-xs mt-0.5">
-                  {bookingConfirmWorker.review_count && bookingConfirmWorker.review_count > 0 && bookingConfirmWorker.average_rating ? (
-                    <div className="flex items-center gap-1 text-amber-600 font-bold">
-                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                      <span>{bookingConfirmWorker.average_rating.toFixed(1)}</span>
-                      <span className="text-[#83928E] font-normal text-[11px]">
-                        ({bookingConfirmWorker.review_count} {bookingConfirmWorker.review_count === 1 ? 'review' : 'reviews'})
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Star className="w-3 h-3 text-teal-600 fill-teal-600" />
-                      ★ New Partner (0 Jobs)
-                    </span>
-                  )}
+                  <span>{bookingConfirmWorker.distance_meters != null ? `${(bookingConfirmWorker.distance_meters / 1000).toFixed(1)} km away` : 'Location Pending'}</span>
                 </div>
               </div>
             </div>
 
+            {/* Worker Reputation & Stats Grid (Merged from Profile) */}
+            <div className="bg-[#FAF9F5] p-3 rounded-xl border border-[#E5DFD2] grid grid-cols-3 gap-2 text-center text-xs">
+              <div>
+                <span className="text-[10px] text-[#83928E] block">Reputation</span>
+                <span className="font-bold text-[#152220] flex items-center justify-center gap-1 mt-0.5">
+                  {bookingConfirmWorker.review_count && bookingConfirmWorker.review_count > 0 && bookingConfirmWorker.average_rating ? (
+                    <>
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>{bookingConfirmWorker.average_rating.toFixed(1)}</span>
+                      <span className="text-[10px] text-[#83928E] font-normal">
+                        ({bookingConfirmWorker.review_count})
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-[#83928E] font-normal">Not rated yet</span>
+                  )}
+                </span>
+              </div>
+              <div className="border-x border-[#E5DFD2]">
+                <span className="text-[10px] text-[#83928E] block">Experience</span>
+                <span className="font-bold text-[#152220] block mt-0.5">
+                  {bookingConfirmWorker.years_experience} Yrs
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-[#83928E] block">Completed</span>
+                <span className="font-bold text-[#152220] block mt-0.5">
+                  {bookingConfirmWorker.total_completed_jobs || 1} Jobs
+                </span>
+              </div>
+            </div>
+
+            {/* Bio & Trade Skills (Merged from Profile) */}
+            {(bookingConfirmWorker.bio || (bookingConfirmWorker.skills && bookingConfirmWorker.skills.length > 0)) && (
+              <div className="p-3.5 bg-[#FAF8F3]/60 rounded-xl border border-[#E5DFD2] space-y-2 text-xs">
+                {bookingConfirmWorker.bio && (
+                  <div>
+                    <h5 className="font-bold text-[#152220] mb-0.5">About Professional</h5>
+                    <p className="text-[#576563] leading-relaxed">
+                      {bookingConfirmWorker.bio}
+                    </p>
+                  </div>
+                )}
+                {bookingConfirmWorker.skills && bookingConfirmWorker.skills.length > 0 && (
+                  <div>
+                    <h5 className="font-bold text-[#152220] mb-1">Trade Skills</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {bookingConfirmWorker.skills.map((skill, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-[#EBF4F3] text-[#0D4A52] font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Service & Fare Summary */}
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                <span className="text-[#576563]">Service Title:</span>
-                <span className="font-bold text-[#152220] max-w-[220px] truncate text-right">
-                  {job.title}
-                </span>
-              </div>
+            <div className="space-y-2.5 text-xs">
 
-              <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                <span className="text-[#576563]">Service Address:</span>
-                <span className="font-semibold text-[#152220] max-w-[220px] truncate text-right">
-                  {job.address_line}, {job.city}
-                </span>
-              </div>
 
-              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+
+
+              <div className="flex justify-between items-center py-1.5 border-b border-gray-100">
                 <span className="text-[#576563]">Estimated Arrival Time:</span>
                 <span className="font-bold text-[#217E66]">
                   {bookingConfirmWorker.distance_meters != null
@@ -2019,16 +1968,7 @@ function JobDiscoveryContent() {
               )}
             </div>
 
-            {/* End-to-End Encryption Notice */}
-            <div className="p-3 bg-[#FAF8F3] rounded-xl border border-[#E5DFD2] text-[11px] text-[#576563] space-y-1">
-              <div className="flex items-center gap-1.5 font-bold text-[#0D4A52]">
-                <Lock className="w-3.5 h-3.5 text-[#217E66]" />
-                <span>End-to-End Encryption</span>
-              </div>
-              <p>
-                A secure numeric OTP and booking handshake is encrypted end-to-end. You share this code with the professional <strong>only</strong> when they arrive at your door to authenticate service commencement.
-              </p>
-            </div>
+
 
             {bookingError && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
@@ -2037,7 +1977,7 @@ function JobDiscoveryContent() {
               </div>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-1">
               <Button
                 variant="secondary"
                 size="md"
@@ -2074,7 +2014,7 @@ function JobDiscoveryContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* 📞 DEMO CALLING FRIENDLY MODAL */}
+      {/* DEMO CALLING FRIENDLY MODAL */}
       {/* ========================================================================= */}
       {showCallModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -2089,7 +2029,7 @@ function JobDiscoveryContent() {
               <strong>{cleanDisplayName(booking?.workerName)}</strong> is an automated demo professional account without a live cellular subscriber identity.
             </p>
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-[11px] text-[#576563] text-left">
-              🔒 <strong>In Live Production:</strong> When a real worker is booked and mutual acceptance is verified, this button initiates a direct, masked telecom carrier phone call to the verified phone number.
+              <strong>In Live Production:</strong> When a real worker is booked and mutual acceptance is verified, this button initiates a direct, masked telecom carrier phone call to the verified phone number.
             </div>
             <Button
               variant="primary"
@@ -2104,7 +2044,7 @@ function JobDiscoveryContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* 💬 IN-APP BOOKING CHAT DRAWER */}
+      {/* IN-APP BOOKING CHAT DRAWER */}
       {/* ========================================================================= */}
       {showChatDrawer && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end animate-in fade-in">
@@ -2258,184 +2198,15 @@ function JobDiscoveryContent() {
         </div>
       )}
 
-      {/* Slide-Over Worker Profile Modal */}
-      {activeWorkerProfile && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-[#E5DFD2] max-w-md w-full p-6 shadow-xl space-y-5 animate-in zoom-in-95">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-[#EBF4F3] border border-[#BCE5DA] flex items-center justify-center text-[#0D4A52] font-bold text-base overflow-hidden">
-                  {activeWorkerProfile.avatar_url ? (
-                    <img
-                      src={activeWorkerProfile.avatar_url}
-                      alt={cleanDisplayName(activeWorkerProfile.full_name)}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    cleanDisplayName(activeWorkerProfile.full_name)
-                      .split(' ')
-                      .map((n) => n[0])
-                      .slice(0, 2)
-                      .join('')
-                      .toUpperCase()
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-[#152220]">
-                      {cleanDisplayName(activeWorkerProfile.full_name)}
-                    </h3>
-                    {activeWorkerProfile.is_demo || activeWorkerProfile.worker_source === 'demo' ? (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wide">
-                        Demo Profile
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wide">
-                          Real Worker
-                        </span>
-                        {activeWorkerProfile.is_cross_service_demo && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 uppercase tracking-wide">
-                            Cross-Service Demo
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-[#217E66] font-semibold capitalize">
-                      {formatWorkerCategory(activeWorkerProfile.primary_category, activeWorkerProfile.skills)}
-                    </span>
-                    <Badge variant="teal" className="text-[10px]">
-                      Verified ID
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setActiveWorkerProfile(null)}
-                className="p-1 rounded-full text-[#83928E] hover:text-[#152220]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Profile Overview Card */}
-            <div className="bg-[#FAF9F5] p-3.5 rounded-xl border border-[#E5DFD2] grid grid-cols-3 gap-2 text-center text-xs">
-              <div>
-                <span className="text-[10px] text-[#83928E] block">Reputation</span>
-                <span className="font-bold text-[#152220] flex items-center justify-center gap-1 mt-0.5">
-                  {activeWorkerProfile.review_count && activeWorkerProfile.review_count > 0 && activeWorkerProfile.average_rating ? (
-                    <>
-                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                      <span>{activeWorkerProfile.average_rating.toFixed(1)}</span>
-                      <span className="text-[10px] text-[#83928E] font-normal">
-                        ({activeWorkerProfile.review_count})
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded">
-                      ★ New Partner (0 Jobs)
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="border-x border-[#E5DFD2]">
-                <span className="text-[10px] text-[#83928E] block">Experience</span>
-                <span className="font-bold text-[#152220] block mt-0.5">
-                  {activeWorkerProfile.years_experience} Yrs
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-[#83928E] block">Completed</span>
-                <span className="font-bold text-[#152220] block mt-0.5">
-                  {activeWorkerProfile.total_completed_jobs} Jobs
-                </span>
-              </div>
-            </div>
-
-            {/* Bio & Skills */}
-            <div className="space-y-3 text-xs">
-              <div>
-                <h4 className="font-bold text-[#152220] mb-1">About Professional</h4>
-                <p className="text-[#576563] leading-relaxed">
-                  {activeWorkerProfile.bio || 'Verified service professional operating in this locality.'}
-                </p>
-              </div>
-
-              {activeWorkerProfile.skills && activeWorkerProfile.skills.length > 0 && (
-                <div>
-                  <h4 className="font-bold text-[#152220] mb-1.5">Trade Skills</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {activeWorkerProfile.skills.map((skill, idx) => (
-                      <span
-                        key={idx}
-                        className="text-[11px] px-2.5 py-0.5 rounded-full bg-[#EBF4F3] text-[#0D4A52] font-medium"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Worker Individual Quote for Job */}
-            <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#E5DFD2] flex items-center justify-between">
-              <div>
-                <span className="text-xs text-[#576563] font-medium block">Personalized Service Quote:</span>
-                <span className="text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                  Fair Price Range: ₹{job.estimated_min_price_inr || 300} – ₹{job.estimated_max_price_inr || Math.max((job.estimated_min_price_inr || 300) + 100, Math.round((job.estimated_min_price_inr || 300) * 1.5))}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-base font-extrabold text-[#0D4A52]">
-                  ₹{getWorkerQuote(activeWorkerProfile)}
-                </span>
-              </div>
-            </div>
-
-            {/* Privacy & Bidding Assurance */}
-            <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-[11px] text-[#576563] space-y-1">
-              <div className="flex items-center gap-1.5 font-semibold text-[#152220]">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#217E66]" />
-                <span>Zero-Trust Privacy Protection</span>
-              </div>
-              <p>
-                Direct contact details and service addresses are only exchanged upon mutual bid acceptance with OTP verification.
-              </p>
-            </div>
-
-            <div className="space-y-2 pt-1">
-              <Button
-                variant="primary"
-                className="w-full text-xs font-bold gap-2 bg-[#0D4A52] hover:bg-[#072F35]"
-                disabled={booking !== null && booking.stage !== 'completed' && booking.stage !== 'cancelled'}
-                onClick={() => handleOpenBookingConfirm(activeWorkerProfile)}
-              >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>Book This Professional Now</span>
-              </Button>
-
-              <Button
-                variant="secondary"
-                className="w-full text-xs"
-                onClick={() => setActiveWorkerProfile(null)}
-              >
-                Close Profile
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ========================================================================= */}
-      {/* 🛑 CANCELLATION CONFIRMATION MODAL */}
+      {/* CANCELLATION CONFIRMATION MODAL */}
       {/* ========================================================================= */}
       {showCancelModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md modal-backdrop flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div className="bg-white rounded-3xl border border-[#E5DFD2] max-w-md w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
             {/* Modal Header */}
             <div className="flex items-start justify-between">
@@ -2526,7 +2297,7 @@ function JobDiscoveryContent() {
 
             {/* Warning Note */}
             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
-              ⚠️ Cancelling will immediately stop the professional’s travel dispatch. Your job will be returned to the open marketplace so you can invite or receive new offers.
+              Cancelling will immediately stop the professional’s travel dispatch. Your job will be returned to the open marketplace so you can invite or receive new offers.
             </div>
 
             {/* Actions */}

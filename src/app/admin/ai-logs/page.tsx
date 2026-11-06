@@ -10,6 +10,7 @@ import {
   FileText,
   Image as ImageIcon,
   CheckCircle2,
+  Clock,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/admin/ToastContext';
@@ -150,11 +151,10 @@ export default function AiJobLogsPage() {
                 <div className="flex items-center gap-1.5 bg-[#FAF9F5] p-1 rounded-xl border border-[#E5DFD2]">
                   <button
                     onClick={() => handleFeedback(log.id, 'up')}
-                    className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
-                      log.feedback === 'up'
+                    className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${log.feedback === 'up'
                         ? 'bg-emerald-600 text-white'
                         : 'text-[#576563] hover:text-emerald-700 hover:bg-emerald-50'
-                    }`}
+                      }`}
                     title="Good AI Output"
                   >
                     <ThumbsUp className="w-3.5 h-3.5" />
@@ -163,11 +163,10 @@ export default function AiJobLogsPage() {
 
                   <button
                     onClick={() => handleFeedback(log.id, 'down')}
-                    className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
-                      log.feedback === 'down'
+                    className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${log.feedback === 'down'
                         ? 'bg-rose-600 text-white'
                         : 'text-[#576563] hover:text-rose-700 hover:bg-rose-50'
-                    }`}
+                      }`}
                     title="Bad AI Output"
                   >
                     <ThumbsDown className="w-3.5 h-3.5" />
@@ -209,8 +208,9 @@ export default function AiJobLogsPage() {
                         </span>
                       )}
                       {log.generatedScope.durationEstimate && (
-                        <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">
-                          ⏱ {log.generatedScope.durationEstimate}
+                        <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-gray-500" />
+                          <span>{log.generatedScope.durationEstimate}</span>
                         </span>
                       )}
                     </div>

@@ -68,3 +68,15 @@ button:has(> svg[data-next-icon="true"]) {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* Hide header / navbar when any modal or popup dialog is open */
+body.modal-open header,
+body[style*="overflow: hidden"] header,
+body:has([role="dialog"]) header,
+body:has(.modal-backdrop) header {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateY(-100%) !important;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease !important;
+}

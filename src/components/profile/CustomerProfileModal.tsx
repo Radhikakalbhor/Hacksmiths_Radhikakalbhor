@@ -29,7 +29,7 @@ export function CustomerProfileModal({
   const [defaultAddress, setDefaultAddress] = useState('');
   const [fallbackPhone, setFallbackPhone] = useState('');
 
-  // Close on Escape key press
+  // Close on Escape key press and lock background scroll
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !saving) {
@@ -38,8 +38,17 @@ export function CustomerProfileModal({
     };
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.style.overflow = '';
+      document.body.classList.remove('modal-open');
     }
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+      document.body.classList.remove('modal-open');
+    };
   }, [isOpen, saving, onClose]);
 
   // Fetch customer profile when modal opens
@@ -236,7 +245,7 @@ export function CustomerProfileModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md modal-backdrop animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget && !saving) onClose();
       }}

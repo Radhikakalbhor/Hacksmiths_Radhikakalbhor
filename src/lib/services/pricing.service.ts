@@ -397,7 +397,7 @@ export class PricingService {
       reason += ` and ${distReason}`;
     }
     if (workerRating && workerRating >= 4.5) {
-      reason += ` with ${workerRating.toFixed(1)}★ rating`;
+      reason += ` with ${workerRating.toFixed(1)} star rating`;
     }
 
     return { score: totalScore, reason };

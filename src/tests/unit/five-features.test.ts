@@ -277,7 +277,7 @@ describe('5. Reviews & Ratings Authorization & Integrity', () => {
       average_rating: null,
     };
     const displayLabel = workerWithNoReviews.review_count > 0 && workerWithNoReviews.average_rating !== null
-      ? `★ ${workerWithNoReviews.average_rating}`
+      ? `${workerWithNoReviews.average_rating}`
       : 'Not rated yet';
 
     assert.equal(displayLabel, 'Not rated yet');
