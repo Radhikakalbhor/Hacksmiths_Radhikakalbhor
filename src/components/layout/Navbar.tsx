@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'motion/react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { CustomerNavbar } from '@/components/layout/CustomerNavbar';
 import { WorkerNavbar } from '@/components/layout/WorkerNavbar';
@@ -12,8 +12,12 @@ function NavbarContent() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'customer' | 'worker' | 'admin' | null>(null);
-  const [hasModalOpen, setHasModalOpen] = useState(false);
   const pathname = usePathname();
+
+  // Floating navbar animation (reveals on scroll up, hides on scroll down)
+  const { scrollY } = useScroll();
+  const [visible, setVisible] = useState(true);
+  const [hasModalOpen, setHasModalOpen] = useState(false);
 
   // Monitor DOM for any active pop-up modal so the navbar stays hidden when a modal is open
   useEffect(() => {
@@ -42,6 +46,25 @@ function NavbarContent() {
 
     return () => observer.disconnect();
   }, []);
+
+  useMotionValueEvent(scrollY, 'change', (current) => {
+    if (typeof current === 'number') {
+      const prev = scrollY.getPrevious() ?? 0;
+      const direction = current - prev;
+
+      // Always visible near top of page
+      if (current < 50) {
+        setVisible(true);
+      } else {
+        // Scrolling UP reveals navbar; scrolling DOWN hides it
+        if (direction < 0) {
+          setVisible(true);
+        } else if (direction > 5) {
+          setVisible(false);
+        }
+      }
+    }
+  });
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -105,57 +128,70 @@ function NavbarContent() {
     return null;
   }
 
+  const isNavVisible = visible && !hasModalOpen;
+
   return (
-    <div
-      className={`transition-opacity duration-200 ${
-        hasModalOpen ? 'opacity-0 invisible pointer-events-none' : ''
-      }`}
-    >
-      {isAuthPage ? (
-        /* Minimal Auth Header with Brand Logo */
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <Image
-                src="/images/logo.png"
-                alt="Sahayak Logo"
-                width={38}
-                height={38}
-                className="w-9 h-9 rounded-xl object-cover shadow-xs border border-[#E5DFD2]/60 group-hover:scale-105 transition-transform"
-                priority
-              />
-              <div className="flex flex-col">
-                <span className="font-extrabold text-xl text-[#0D4A52] tracking-tight group-hover:text-[#072F35] transition-colors leading-none">
+    <AnimatePresence mode="wait">
+      <motion.header
+        initial={{ y: 0, opacity: 1 }}
+        animate={{
+          y: isNavVisible ? 0 : -100,
+          opacity: isNavVisible ? 1 : 0,
+        }}
+        transition={{
+          duration: 0.2,
+          ease: 'easeInOut',
+        }}
+        className={`sticky top-0 z-50 w-full bg-transparent transition-opacity duration-200 ${
+          hasModalOpen ? 'opacity-0 invisible pointer-events-none' : ''
+        }`}
+      >
+        {isAuthPage ? (
+          /* Minimal Auth Header */
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <Link href="/" className="flex flex-col group">
+                <span className="font-extrabold text-2xl text-[#0D4A52] tracking-tight group-hover:text-[#072F35] transition-colors">
                   Sahayak
                 </span>
-                <p className="text-[10px] text-[#576563] hidden sm:block font-medium mt-0.5">
-                  Trusted help. Fair work.
-                </p>
-              </div>
-            </Link>
+                <p className="text-[11px] text-[#576563] hidden sm:block">Trusted help. Fair work.</p>
+              </Link>
+            </div>
           </div>
-        </div>
-      ) : isWorkerPortal ? (
-        /* Dedicated Worker Aceternity Sidebar Navigation */
-        <WorkerNavbar
-          userEmail={userEmail}
-          displayName={displayName}
-          onSignOut={handleSignOut}
-        />
-      ) : (
-        /* Dedicated Customer Aceternity Sidebar Navigation */
-        <CustomerNavbar
-          userEmail={userEmail}
-          displayName={displayName}
-          onSignOut={handleSignOut}
-        />
-      )}
-    </div>
+        ) : isWorkerPortal ? (
+          /* Dedicated Worker Navigation */
+          <WorkerNavbar
+            userEmail={userEmail}
+            displayName={displayName}
+            onSignOut={handleSignOut}
+          />
+        ) : (
+          /* Dedicated Customer Navigation */
+          <CustomerNavbar
+            userEmail={userEmail}
+            displayName={displayName}
+            onSignOut={handleSignOut}
+          />
+        )}
+      </motion.header>
+    </AnimatePresence>
   );
 }
 
 export function NavbarFallback() {
-  return null;
+  return (
+    <header className="sticky top-0 z-50 w-full bg-transparent">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-18">
+          <Link href="/" className="flex flex-col">
+            <span className="font-extrabold text-2xl text-[#0D4A52] tracking-tight">Sahayak</span>
+            <p className="text-[11px] text-[#576563] hidden sm:block">Trusted help. Fair work.</p>
+          </Link>
+          <div className="h-9 w-24 bg-gray-200 animate-pulse rounded-full" />
+        </div>
+      </div>
+    </header>
+  );
 }
 
 export function Navbar() {

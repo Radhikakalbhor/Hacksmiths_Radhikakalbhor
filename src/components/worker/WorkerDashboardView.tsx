@@ -540,23 +540,97 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
     <div className="min-h-screen bg-transparent text-[#152220] pb-20">
       {/* Main Body */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
-        {/* Active Section Header */}
+        {/* Navigation Tabs - Long Connected Button UI */}
         <div className="flex items-center justify-between border-b border-[#E5DFD2] pb-4 flex-wrap gap-3">
-          <div>
-            <h2 className="text-xl font-extrabold text-[#152220] flex items-center gap-2">
-              {workerNavTab === 'overview' && 'Work Overview'}
-              {workerNavTab === 'wallet' && 'Earnings & Wallet'}
-              {workerNavTab === 'marketplace' && 'Open Marketplace'}
-              {workerNavTab === 'reputation' && 'Reputation & Reviews'}
-              {workerNavTab === 'admin' && 'Admin Control Panel'}
-            </h2>
-            <p className="text-xs text-[#576563] mt-0.5">
-              {workerNavTab === 'overview' && 'Manage your scheduled jobs, incoming offers, and service history.'}
-              {workerNavTab === 'wallet' && 'Track your earnings, account balance, and process payout withdrawals.'}
-              {workerNavTab === 'marketplace' && 'Explore real-time broadcasts and bid on jobs in your micro-market.'}
-              {workerNavTab === 'reputation' && 'Verified customer reviews and quality performance ratings.'}
-              {workerNavTab === 'admin' && 'Administrative management and moderation oversight.'}
-            </p>
+          <div className="inline-flex items-center p-1.5 rounded-full bg-white/90 backdrop-blur-md border border-[#E5DFD2] shadow-xs gap-1 max-w-full overflow-x-auto scrollbar-none">
+            <button
+              onClick={() => setWorkerNavTab('overview')}
+              className={`px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                workerNavTab === 'overview'
+                  ? 'bg-[#0D4A52] text-white shadow-xs'
+                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-black/5'
+              }`}
+            >
+              <Briefcase className="w-4 h-4" />
+              <span>Work Overview</span>
+              {totalActiveJobs > 0 && (
+                <span
+                  className={`ml-0.5 px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    workerNavTab === 'overview' ? 'bg-teal-400 text-teal-950' : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  {totalActiveJobs}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setWorkerNavTab('wallet')}
+              className={`px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                workerNavTab === 'wallet'
+                  ? 'bg-[#0D4A52] text-white shadow-xs'
+                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-black/5'
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              <span>Earnings &amp; Wallet</span>
+            </button>
+
+            <button
+              onClick={() => setWorkerNavTab('marketplace')}
+              className={`px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                workerNavTab === 'marketplace'
+                  ? 'bg-[#0D4A52] text-white shadow-xs'
+                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-black/5'
+              }`}
+            >
+              <Compass className="w-4 h-4" />
+              <span>Open Marketplace</span>
+              {openJobs.length > 0 && (
+                <span
+                  className={`ml-0.5 px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    workerNavTab === 'marketplace' ? 'bg-teal-400 text-teal-950' : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  {openJobs.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setWorkerNavTab('reputation')}
+              className={`px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                workerNavTab === 'reputation'
+                  ? 'bg-[#0D4A52] text-white shadow-xs'
+                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-black/5'
+              }`}
+            >
+              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+              <span>Reputation &amp; Reviews</span>
+              {reputationData && (
+                <span
+                  className={`ml-0.5 px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    workerNavTab === 'reputation' ? 'bg-amber-400 text-amber-950' : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  {reputationData.averageRating}
+                </span>
+              )}
+            </button>
+
+            {(userRole === 'admin' || searchParams.get('admin') === 'true') && (
+              <button
+                onClick={() => setWorkerNavTab('admin')}
+                className={`px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  workerNavTab === 'admin'
+                    ? 'bg-[#0D4A52] text-white shadow-xs'
+                    : 'text-[#576563] hover:text-[#0D4A52] hover:bg-black/5'
+                }`}
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                <span>Admin Controls</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
