@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
   IconBrandTabler,
@@ -11,7 +12,6 @@ import {
   IconUserBolt,
   IconArrowLeft,
   IconBell,
-  IconSettings,
 } from '@tabler/icons-react';
 import { motion } from 'motion/react';
 import { Sidebar, SidebarBody, SidebarLink } from '@/components/ui/sidebar';
@@ -30,9 +30,14 @@ export const WorkerLogo = () => {
       href="/worker/dashboard"
       className="relative z-20 flex items-center space-x-2.5 py-1 text-sm font-normal group"
     >
-      <div className="h-6 w-6 shrink-0 rounded-lg bg-[#0D4A52] flex items-center justify-center text-white font-black text-xs shadow-xs group-hover:bg-[#072F35] transition">
-        W
-      </div>
+      <Image
+        src="/images/logo.png"
+        alt="Sahayak Logo"
+        width={32}
+        height={32}
+        className="w-7 h-7 rounded-lg object-cover shadow-xs border border-[#E5DFD2]/60 shrink-0 group-hover:scale-105 transition-transform"
+        priority
+      />
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -56,9 +61,14 @@ export const WorkerLogoIcon = () => {
       className="relative z-20 flex items-center justify-center py-1 group"
       title="Sahayak Worker"
     >
-      <div className="h-6 w-6 shrink-0 rounded-lg bg-[#0D4A52] flex items-center justify-center text-white font-black text-xs shadow-xs group-hover:bg-[#072F35] transition">
-        W
-      </div>
+      <Image
+        src="/images/logo.png"
+        alt="Sahayak Logo"
+        width={32}
+        height={32}
+        className="w-7 h-7 rounded-lg object-cover shadow-xs border border-[#E5DFD2]/60 shrink-0 group-hover:scale-105 transition-transform"
+        priority
+      />
     </Link>
   );
 };
@@ -175,8 +185,6 @@ export function WorkerNavbar({ userEmail, displayName, onSignOut }: WorkerNavbar
   const isReputationActive =
     pathname === '/worker/reputation' ||
     currentTab === 'reputation';
-
-  const isAdminActive = currentTab === 'admin';
 
   const workerLinks = [
     {

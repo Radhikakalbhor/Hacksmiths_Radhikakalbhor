@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   IconPlus,
@@ -29,9 +30,14 @@ export const CustomerLogo = () => {
       href="/post-job"
       className="relative z-20 flex items-center space-x-2.5 py-1 text-sm font-normal group"
     >
-      <div className="h-6 w-6 shrink-0 rounded-lg bg-[#0D4A52] flex items-center justify-center text-white font-black text-xs shadow-xs group-hover:bg-[#072F35] transition">
-        S
-      </div>
+      <Image
+        src="/images/logo.png"
+        alt="Sahayak Logo"
+        width={32}
+        height={32}
+        className="w-7 h-7 rounded-lg object-cover shadow-xs border border-[#E5DFD2]/60 shrink-0 group-hover:scale-105 transition-transform"
+        priority
+      />
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -55,9 +61,14 @@ export const CustomerLogoIcon = () => {
       className="relative z-20 flex items-center justify-center py-1 group"
       title="Sahayak"
     >
-      <div className="h-6 w-6 shrink-0 rounded-lg bg-[#0D4A52] flex items-center justify-center text-white font-black text-xs shadow-xs group-hover:bg-[#072F35] transition">
-        S
-      </div>
+      <Image
+        src="/images/logo.png"
+        alt="Sahayak Logo"
+        width={32}
+        height={32}
+        className="w-7 h-7 rounded-lg object-cover shadow-xs border border-[#E5DFD2]/60 shrink-0 group-hover:scale-105 transition-transform"
+        priority
+      />
     </Link>
   );
 };
