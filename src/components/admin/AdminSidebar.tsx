@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -67,9 +68,14 @@ export function AdminSidebar({
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-[#E5DFD2]/70">
         <Link href="/admin" className="flex items-center gap-3 overflow-hidden">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0D4A52] to-[#217E66] flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0">
-            S
-          </div>
+          <Image
+            src="/images/logo.png"
+            alt="Sahayak Logo"
+            width={36}
+            height={36}
+            className="w-9 h-9 rounded-xl object-cover shadow-sm border border-[#E5DFD2]/60 shrink-0"
+            priority
+          />
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="font-bold text-base tracking-tight text-[#0D4A52] leading-none">

@@ -24,6 +24,21 @@ export const metadata: Metadata = {
     'Sahayak',
   ],
   authors: [{ name: 'Sahayak Technologies' }],
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/images/logo.png', type: 'image/png', sizes: '512x512' },
+    ],
+    apple: [
+      { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+    shortcut: ['/favicon.ico'],
+  },
+  openGraph: {
+    title: 'Sahayak | AI-Powered Hyperlocal Services Marketplace',
+    description: 'Trusted help. Fair work. Stronger communities.',
+    images: [{ url: '/images/logo-full.png', width: 1024, height: 572, alt: 'Sahayak Home Services' }],
+  },
 };
 
 export const viewport: Viewport = {

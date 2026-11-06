@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   Briefcase,
@@ -114,7 +115,15 @@ export function WorkerNavbar({ userEmail, displayName, onSignOut }: WorkerNavbar
         <div className="flex items-center justify-between h-16">
           {/* Brand Name & Worker Badge */}
           <div className="flex items-center gap-3">
-            <Link href="/worker/dashboard" className="flex items-center gap-2 group">
+            <Link href="/worker/dashboard" className="flex items-center gap-2.5 group">
+              <Image
+                src="/images/logo.png"
+                alt="Sahayak Logo"
+                width={36}
+                height={36}
+                className="w-9 h-9 rounded-xl object-cover shadow-xs border border-[#E5DFD2]/60 group-hover:scale-105 transition-transform"
+                priority
+              />
               <span className="font-black text-xl tracking-tight text-[#0D4A52] group-hover:text-[#072F35] transition-colors">
                 Sahayak<span className="text-teal-600 font-medium">Worker</span>
               </span>

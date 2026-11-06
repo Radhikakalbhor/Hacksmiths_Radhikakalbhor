@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// ---------------------------------------------------------------------------
 /// Sahayak Android Native Wrapper (Flutter)
@@ -160,26 +161,27 @@ class _SplashScreenState extends State<SplashScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // App Icon / Logo Shield
+                  // Official Brand Logo Badge
                   Container(
-                    width: 104,
-                    height: 104,
+                    width: 112,
+                    height: 112,
                     decoration: BoxDecoration(
-                      color: Colors.white,
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
-                          blurRadius: 20,
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 24,
                           offset: const Offset(0, 10),
                         ),
                       ],
                     ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.handyman_rounded,
-                        size: 54,
-                        color: kDeepTeal,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        width: 112,
+                        height: 112,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
@@ -283,6 +285,10 @@ class _WebViewScreenState extends State<WebViewScreen> {
       // Media & Audio Recording support
       mediaPlaybackRequiresUserGesture: false,
       allowsInlineMediaPlayback: true,
+
+      // Window management: keep all tabs & popups within this WebView
+      supportMultipleWindows: false,
+      javaScriptCanOpenWindowsAutomatically: true,
 
       // Smooth modern rendering
       useHybridComposition: true,
@@ -485,7 +491,79 @@ class _WebViewScreenState extends State<WebViewScreen> {
                   },
 
                   /// ---------------------------------------------------------
-                  /// 2. HTML5 Geolocation Permission Handler (GPS on Post Job)
+                  /// 2. In-App Domain Routing & Native Intent Handlers
+                  /// Handles phone calling (tel:), emails (mailto:), SMS, and
+                  /// WhatsApp externally, while keeping all Sahayak routes,
+                  /// Supabase Auth, and Vercel services inside the WebView.
+                  /// ---------------------------------------------------------
+                  shouldOverrideUrlLoading:
+                      (controller, navigationAction) async {
+                    final uri = navigationAction.request.url;
+                    if (uri == null) {
+                      return NavigationActionPolicy.ALLOW;
+                    }
+
+                    final scheme = uri.scheme.toLowerCase();
+
+                    // Launch phone dialer, messaging, mail, or whatsapp externally
+                    if (scheme == 'tel' ||
+                        scheme == 'mailto' ||
+                        scheme == 'sms' ||
+                        scheme == 'whatsapp') {
+                      try {
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
+                      } catch (_) {}
+                      return NavigationActionPolicy.CANCEL;
+                    }
+
+                    // Handle WhatsApp web links (e.g. wa.me / api.whatsapp.com)
+                    final host = uri.host.toLowerCase();
+                    if (host == 'wa.me' || host == 'api.whatsapp.com') {
+                      try {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                        return NavigationActionPolicy.CANCEL;
+                      } catch (_) {}
+                    }
+
+                    return NavigationActionPolicy.ALLOW;
+                  },
+
+                  /// ---------------------------------------------------------
+                  /// 3. Multi-Window / Popup Handler (window.open)
+                  /// ---------------------------------------------------------
+                  onCreateWindow: (controller, createWindowAction) async {
+                    if (createWindowAction.request.url != null) {
+                      controller.loadUrl(
+                        urlRequest: createWindowAction.request,
+                      );
+                    }
+                    return false;
+                  },
+
+                  /// ---------------------------------------------------------
+                  /// 4. File Downloads (CSV Exports, Reports, PDFs)
+                  /// ---------------------------------------------------------
+                  onDownloadStartRequest:
+                      (controller, downloadStartRequest) async {
+                    final url = downloadStartRequest.url;
+                    try {
+                      await launchUrl(
+                        url,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    } catch (_) {}
+                  },
+
+                  /// ---------------------------------------------------------
+                  /// 5. HTML5 Geolocation Permission Handler (GPS on Post Job)
                   /// ---------------------------------------------------------
                   onGeolocationPermissionsShowPrompt:
                       (controller, origin) async {

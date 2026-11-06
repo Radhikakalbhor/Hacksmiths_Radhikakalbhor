@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Menu, X, PlusCircle, CalendarClock, Wrench, ShieldCheck, Calculator, User, LogOut } from 'lucide-react';
 import { CustomerProfileModal } from '@/components/profile/CustomerProfileModal';
@@ -28,11 +29,21 @@ export function CustomerNavbar({ userEmail, displayName, onSignOut }: CustomerNa
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-18">
           {/* Brand Name & Tagline */}
-          <Link href="/post-job" className="flex flex-col group">
-            <span className="font-extrabold text-2xl text-[#0D4A52] tracking-tight group-hover:text-[#072F35] transition-colors">
-              Sahayak
-            </span>
-            <p className="text-[11px] text-[#576563] hidden sm:block">Trusted help. Fair work.</p>
+          <Link href="/post-job" className="flex items-center gap-2.5 group">
+            <Image
+              src="/images/logo.png"
+              alt="Sahayak Logo"
+              width={38}
+              height={38}
+              className="w-9 h-9 rounded-xl object-cover shadow-xs border border-[#E5DFD2]/60 group-hover:scale-105 transition-transform"
+              priority
+            />
+            <div className="flex flex-col">
+              <span className="font-extrabold text-xl text-[#0D4A52] tracking-tight group-hover:text-[#072F35] transition-colors leading-none">
+                Sahayak
+              </span>
+              <p className="text-[10px] text-[#576563] hidden sm:block font-medium mt-0.5">Trusted help. Fair work.</p>
+            </div>
           </Link>
 
           {/* Desktop Nav Links - Customer Focused */}

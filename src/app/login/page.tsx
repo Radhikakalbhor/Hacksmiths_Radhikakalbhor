@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -638,20 +639,32 @@ function LoginContent() {
 
   return (
     <div className="max-w-lg w-full bg-white/95 backdrop-blur-md rounded-2xl border border-[#E5DFD2] p-6 sm:p-8 shadow-xl space-y-6">
-      {/* Header Banner */}
-      <div className="text-center space-y-2">
-        <h1 className="text-2xl font-extrabold text-[#152220] tracking-tight">
-          {role === 'worker'
-            ? isRegisteringWorker
-              ? 'Register as a Professional Partner'
-              : 'Worker Sign In'
-            : 'Sign in to Sahayak'}
-        </h1>
-        <p className="text-xs text-[#576563] leading-relaxed">
-          {role === 'worker'
-            ? 'Access transparent bids, keep 90%+ of earnings, and build a verified local reputation passport.'
-            : 'Find verified local tradesmen, compare price benchmarks, and post service requests safely.'}
-        </p>
+      {/* Header Banner with Brand Logo */}
+      <div className="text-center space-y-3 flex flex-col items-center">
+        <Link href="/" className="inline-block transition-transform hover:scale-105">
+          <Image
+            src="/images/logo.png"
+            alt="Sahayak"
+            width={68}
+            height={68}
+            className="w-16 h-16 rounded-2xl object-cover shadow-md border border-[#E5DFD2]/80 mx-auto"
+            priority
+          />
+        </Link>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-extrabold text-[#152220] tracking-tight">
+            {role === 'worker'
+              ? isRegisteringWorker
+                ? 'Register as a Professional Partner'
+                : 'Worker Sign In'
+              : 'Sign in to Sahayak'}
+          </h1>
+          <p className="text-xs text-[#576563] leading-relaxed max-w-sm mx-auto">
+            {role === 'worker'
+              ? 'Access transparent bids, keep 90%+ of earnings, and build a verified local reputation passport.'
+              : 'Find verified local tradesmen, compare price benchmarks, and post service requests safely.'}
+          </p>
+        </div>
       </div>
 
       {/* Logged in state display */}
