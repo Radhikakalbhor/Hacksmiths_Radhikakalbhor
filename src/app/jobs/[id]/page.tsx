@@ -45,6 +45,7 @@ import {
   calculateEstimatedTravelTimeMinutes,
 } from '@/types/booking';
 import { PricingService } from '@/lib/services/pricing.service';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 const CANCELLATION_REASONS = [
   'Estimated wait time is too long',
@@ -238,7 +239,23 @@ function JobDiscoveryContent() {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Authenticate current user for chat role matching
+  useEffect(() => {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        supabase.auth.getUser().then(({ data }: { data: { user: any } }) => {
+          if (data?.user) setCurrentUserId(data.user.id);
+        }).catch((err: unknown) => console.warn('Could not retrieve current user for chat:', err));
+      }
+    } catch {
+      // Non-blocking in non-auth contexts
+    }
+  }, []);
 
   // Worker Transition & OTP States
   const [workerOtpInput, setWorkerOtpInput] = useState('');
@@ -440,7 +457,7 @@ function JobDiscoveryContent() {
     };
   }, [job, searchRadius]);
 
-  // 3. Messages Polling
+  // 3. Messages Polling & Read Status
   const fetchMessages = useCallback(async () => {
     if (!jobId || !booking) return;
     try {
@@ -449,6 +466,8 @@ function JobDiscoveryContent() {
       const data = await res.json();
       if (res.ok && data.data?.messages) {
         setMessages(data.data.messages);
+        const unread = data.data.unreadCountForCustomer ?? data.data.unreadCount ?? 0;
+        setUnreadChatCount(unread);
       }
     } catch (err) {
       console.warn('Failed to load messages:', err);
@@ -457,10 +476,36 @@ function JobDiscoveryContent() {
     }
   }, [jobId, booking]);
 
+  // Mark messages as read when drawer is opened
+  const markMessagesRead = useCallback(async () => {
+    if (!jobId || !booking) return;
+    try {
+      await fetch(`/api/jobs/${jobId}/messages`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'customer' }),
+      });
+      setUnreadChatCount(0);
+    } catch (err) {
+      console.warn('Failed to mark messages read:', err);
+    }
+  }, [jobId, booking]);
+
+  // Active polling when chat drawer is open
   useEffect(() => {
     if (booking && showChatDrawer) {
+      markMessagesRead();
       fetchMessages();
-      const interval = setInterval(fetchMessages, 3000);
+      const interval = setInterval(fetchMessages, 2500);
+      return () => clearInterval(interval);
+    }
+  }, [booking, showChatDrawer, fetchMessages, markMessagesRead]);
+
+  // Background polling for unread count when chat drawer is closed
+  useEffect(() => {
+    if (booking && !showChatDrawer) {
+      fetchMessages();
+      const interval = setInterval(fetchMessages, 10000);
       return () => clearInterval(interval);
     }
   }, [booking, showChatDrawer, fetchMessages]);
@@ -471,6 +516,18 @@ function JobDiscoveryContent() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, showChatDrawer]);
+
+  // Handle Escape key to dismiss chat drawer
+  useEffect(() => {
+    if (!showChatDrawer) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowChatDrawer(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showChatDrawer]);
 
   // 4. Simulated Arrival Countdown Timer
   useEffect(() => {
@@ -1249,6 +1306,11 @@ function JobDiscoveryContent() {
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>Message Worker</span>
+                          {unreadChatCount > 0 && (
+                            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-emerald-300 text-teal-950 animate-pulse">
+                              {unreadChatCount}
+                            </span>
+                          )}
                         </Button>
 
                         <Button
@@ -1275,6 +1337,11 @@ function JobDiscoveryContent() {
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
                         <span>View Chat</span>
+                        {unreadChatCount > 0 && (
+                          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-emerald-600 text-white animate-pulse">
+                            {unreadChatCount}
+                          </span>
+                        )}
                       </Button>
                     )}
                   </div>
@@ -2047,8 +2114,16 @@ function JobDiscoveryContent() {
       {/* IN-APP BOOKING CHAT DRAWER */}
       {/* ========================================================================= */}
       {showChatDrawer && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end animate-in fade-in">
-          <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-200">
+        <div
+          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex justify-end animate-in fade-in"
+          onClick={() => setShowChatDrawer(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-[#0D4A52] text-white">
               <div className="flex items-center gap-2.5">
@@ -2067,7 +2142,10 @@ function JobDiscoveryContent() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={fetchMessages}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetchMessages();
+                  }}
                   className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10"
                   title="Refresh chat"
                 >
@@ -2075,10 +2153,16 @@ function JobDiscoveryContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowChatDrawer(false)}
-                  className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10"
+                  aria-label="Close Chat"
+                  title="Close Chat"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowChatDrawer(false);
+                  }}
+                  className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10 cursor-pointer transition active:scale-95 touch-manipulation"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 pointer-events-none" />
                 </button>
               </div>
             </div>
@@ -2127,7 +2211,7 @@ function JobDiscoveryContent() {
                 </div>
               ) : (
                 messages.map((m) => {
-                  const isMe = m.senderRole === 'customer';
+                  const isMe = currentUserId ? m.senderId === currentUserId : m.senderRole === 'customer';
                   const isDemoSimulation = m.text.includes('[Demo Simulation]') || m.senderName.includes('Demo');
                   const displayText = m.text.replace(/\[Demo Simulation\]\s*/g, '');
 

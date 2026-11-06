@@ -354,4 +354,99 @@ export class BookingService {
 
     return { success: true, message: newMessage };
   }
+
+  /**
+   * Marks unread messages as read for a given reader role in a booking.
+   * If customer reads, marks messages sent by worker as read.
+   * If worker reads, marks messages sent by customer as read.
+   */
+  static async markMessagesAsRead(
+    supabase: SupabaseClient<Database>,
+    jobId: string,
+    readerRole: 'customer' | 'worker'
+  ): Promise<{ success: boolean; markedCount: number }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = supabase as any;
+    const oppositeRole = readerRole === 'customer' ? 'worker' : 'customer';
+
+    let markedCount = 0;
+
+    // 1. Update in public.job_messages table
+    try {
+      const updatePayload: Record<string, any> = { is_read: true };
+      if (readerRole === 'worker') {
+        updatePayload.is_read_by_worker = true;
+      } else {
+        updatePayload.is_read_by_customer = true;
+      }
+
+      const { data, error } = await client
+        .from('job_messages')
+        .update(updatePayload)
+        .eq('job_id', jobId)
+        .eq('sender_role', oppositeRole)
+        .select('id');
+
+      if (!error && Array.isArray(data)) {
+        markedCount = data.length;
+      }
+    } catch {
+      // Ignore
+    }
+
+    // 2. Also update in jobs.ai_details.chat_messages
+    try {
+      const { data: jobData } = await supabase
+        .from('jobs')
+        .select('ai_details')
+        .eq('id', jobId)
+        .maybeSingle();
+
+      const rawAi = (jobData as { ai_details?: unknown })?.ai_details;
+      if (rawAi && typeof rawAi === 'object') {
+        const aiDetails = rawAi as Record<string, unknown>;
+        const existingMessages =
+          (aiDetails.chat_messages as ChatMessage[]) ||
+          (aiDetails.chatMessages as ChatMessage[]) ||
+          [];
+
+        let hasChanges = false;
+        const updated = existingMessages.map((m) => {
+          const isUnreadByReader =
+            readerRole === 'worker'
+              ? m.isReadByWorker === false || !m.isRead
+              : m.isReadByCustomer === false || !m.isRead;
+
+          if (m.senderRole === oppositeRole && isUnreadByReader) {
+            hasChanges = true;
+            markedCount++;
+            return {
+              ...m,
+              isRead: true,
+              isReadByWorker: readerRole === 'worker' ? true : m.isReadByWorker,
+              isReadByCustomer: readerRole === 'customer' ? true : m.isReadByCustomer,
+            };
+          }
+          return m;
+        });
+
+        if (hasChanges) {
+          await supabase
+            .from('jobs')
+            .update({
+              ai_details: {
+                ...aiDetails,
+                chat_messages: updated,
+                chatMessages: updated,
+              } as any,
+            })
+            .eq('id', jobId);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
+    return { success: true, markedCount };
+  }
 }

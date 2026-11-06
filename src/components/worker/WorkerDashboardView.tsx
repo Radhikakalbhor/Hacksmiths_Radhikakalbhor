@@ -41,6 +41,9 @@ import { WorkerCancelModal } from '@/components/worker/WorkerCancelModal';
 import { WorkerWithdrawModal } from '@/components/worker/WorkerWithdrawModal';
 import { WorkerPayoutMethodsModal } from '@/components/worker/WorkerPayoutMethodsModal';
 import { AdminControlPanel } from '@/components/worker/AdminControlPanel';
+import { WorkerChatModal } from '@/components/worker/WorkerChatModal';
+import { WorkerConversationItem } from '@/app/api/worker/messages/route';
+import { MessageSquare } from 'lucide-react';
 
 interface Job {
   id: string;
@@ -64,7 +67,7 @@ interface Job {
 }
 
 export interface WorkerDashboardViewProps {
-  initialTab?: 'overview' | 'wallet' | 'marketplace' | 'reputation' | 'admin';
+  initialTab?: 'overview' | 'wallet' | 'marketplace' | 'reputation' | 'messages' | 'admin';
 }
 
 export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {}) {
@@ -81,17 +84,19 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
     tabFromQuery === 'wallet' ||
     tabFromQuery === 'marketplace' ||
     tabFromQuery === 'reputation' ||
+    tabFromQuery === 'messages' ||
     tabFromQuery === 'admin' ||
     tabFromQuery === 'overview'
       ? tabFromQuery
       : initialTab || 'overview';
-  const [workerNavTab, setWorkerNavTab] = useState<'overview' | 'wallet' | 'marketplace' | 'reputation' | 'admin'>(validTab);
+  const [workerNavTab, setWorkerNavTab] = useState<'overview' | 'wallet' | 'marketplace' | 'reputation' | 'messages' | 'admin'>(validTab);
 
   useEffect(() => {
     if (
       tabFromQuery === 'wallet' ||
       tabFromQuery === 'marketplace' ||
       tabFromQuery === 'reputation' ||
+      tabFromQuery === 'messages' ||
       tabFromQuery === 'admin' ||
       tabFromQuery === 'overview'
     ) {
@@ -130,6 +135,14 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
   const [cancellingJob, setCancellingJob] = useState(false);
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [payoutMethodsModalOpen, setPayoutMethodsModalOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [jobForChat, setJobForChat] = useState<any | null>(null);
+
+  // Conversations & Direct Messaging State
+  const [conversations, setConversations] = useState<WorkerConversationItem[]>([]);
+  const [unreadCountsByJob, setUnreadCountsByJob] = useState<Record<string, number>>({});
+  const [totalMessagesUnread, setTotalMessagesUnread] = useState(0);
+  const [loadingConversations, setLoadingConversations] = useState(false);
 
   // Open Marketplace State
   const [openJobs, setOpenJobs] = useState<Job[]>([]);
@@ -334,6 +347,31 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
     }
   }, []);
 
+  // 7. Fetch Worker Direct Messaging Conversations
+  const fetchConversations = useCallback(async () => {
+    setLoadingConversations(true);
+    try {
+      const res = await fetch('/api/worker/messages');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data?.conversations)) {
+        setConversations(json.data.conversations);
+        setTotalMessagesUnread(json.data.totalUnread || 0);
+
+        const countsMap: Record<string, number> = {};
+        json.data.conversations.forEach((c: WorkerConversationItem) => {
+          if (c.unreadCount > 0) {
+            countsMap[c.jobId] = c.unreadCount;
+          }
+        });
+        setUnreadCountsByJob(countsMap);
+      }
+    } catch {
+      // Ignore
+    } finally {
+      setLoadingConversations(false);
+    }
+  }, []);
+
   // Trigger initial fetches when authenticated as worker
   useEffect(() => {
     if (sessionUser && (userRole === 'worker' || userRole === 'admin')) {
@@ -342,14 +380,16 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
       fetchNotifications();
       fetchWorkerOpenJobs();
       fetchReputation();
+      fetchConversations();
 
-      // Polling notifications every 15 seconds
+      // Polling notifications and conversations every 12 seconds
       const timer = setInterval(() => {
         fetchNotifications();
-      }, 15000);
+        fetchConversations();
+      }, 12000);
       return () => clearInterval(timer);
     }
-  }, [sessionUser, userRole, fetchCategorizedJobs, fetchWalletData, fetchNotifications, fetchWorkerOpenJobs, fetchReputation]);
+  }, [sessionUser, userRole, fetchCategorizedJobs, fetchWalletData, fetchNotifications, fetchWorkerOpenJobs, fetchReputation, fetchConversations]);
 
   // Handle Mark Single Notification Read
   const handleMarkNotificationRead = async (id: string) => {
@@ -565,6 +605,23 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
             </button>
 
             <button
+              onClick={() => setWorkerNavTab('messages')}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
+                workerNavTab === 'messages'
+                  ? 'bg-[#0D4A52] text-white shadow-xs'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Messages</span>
+              {totalMessagesUnread > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-emerald-500 text-white animate-pulse">
+                  {totalMessagesUnread}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => setWorkerNavTab('wallet')}
               className={`px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                 workerNavTab === 'wallet'
@@ -689,7 +746,149 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
             onOpenDetails={(job) => setSelectedJobForModal(job)}
             onOpenCancel={(job) => setJobToCancel(job)}
             onAction={handleWorkerJobAction}
+            onOpenChat={(job) => setJobForChat(job)}
+            unreadCountsByJob={unreadCountsByJob}
           />
+        )}
+
+        {/* TAB: MESSAGES */}
+        {workerNavTab === 'messages' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-[#152220] flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-emerald-600" />
+                  <span>Customer Conversations</span>
+                </h2>
+                <p className="text-xs text-[#576563]">
+                  Direct, two-way messaging with customers for your accepted and active bookings.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={fetchConversations}
+                disabled={loadingConversations}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1 ${loadingConversations ? 'animate-spin' : ''}`} />
+                <span>Refresh Messages</span>
+              </Button>
+            </div>
+
+            {loadingConversations && conversations.length === 0 ? (
+              <div className="py-16 text-center">
+                <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-3" />
+                <p className="text-sm text-gray-500">Loading your conversations...</p>
+              </div>
+            ) : conversations.length === 0 ? (
+              <Card className="p-12 text-center border-dashed border-gray-200">
+                <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-emerald-600">
+                  <MessageSquare className="w-7 h-7" />
+                </div>
+                <h3 className="text-base font-bold text-gray-900">No Booking Conversations Yet</h3>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-5">
+                  When you receive or accept bookings, you and the customer can chat directly in real time.
+                </p>
+                {(categorizedJobs.upcoming.length > 0 || categorizedJobs.pending.length > 0 || categorizedJobs.accepted.length > 0) && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => setWorkerNavTab('overview')}
+                  >
+                    View Your Active Bookings
+                  </Button>
+                )}
+              </Card>
+            ) : (
+              <div className="grid gap-3">
+                {conversations.map((c: WorkerConversationItem) => {
+                  const allActiveJobs = [
+                    ...categorizedJobs.upcoming,
+                    ...categorizedJobs.pending,
+                    ...categorizedJobs.accepted,
+                    ...categorizedJobs.rejected,
+                  ];
+                  const matchingJob =
+                    allActiveJobs.find((j: any) => j.id === c.jobId) || {
+                      id: c.jobId,
+                      title: c.title,
+                      category: c.category,
+                      customerName: c.customerName,
+                      customerPhone: c.customerPhone,
+                      status: c.status,
+                    };
+
+                  return (
+                    <Card
+                      key={c.jobId}
+                      className={`p-4 transition hover:shadow-md cursor-pointer border ${
+                        c.unreadCount > 0 ? 'border-emerald-300 bg-emerald-50/20' : 'border-gray-200 bg-white'
+                      }`}
+                      onClick={() => setJobForChat(matchingJob)}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-11 h-11 rounded-full bg-emerald-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                            {c.customerName?.charAt(0)?.toUpperCase() || 'C'}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-sm text-gray-900 truncate">
+                                {c.customerName || 'Customer'}
+                              </h4>
+                              <Badge variant={c.status === 'in_progress' ? 'teal' : 'neutral'}>
+                                {c.status}
+                              </Badge>
+                              {c.category && (
+                                <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                  {c.category}
+                                </span>
+                              )}
+                              {c.unreadCount > 0 && (
+                                <span className="px-2 py-0.5 bg-emerald-600 text-white text-[11px] font-black rounded-full animate-pulse">
+                                  {c.unreadCount} new
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs font-medium text-gray-700 truncate mt-0.5">
+                              {c.title}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate mt-1">
+                              {c.lastMessage ? (
+                                <span>&ldquo;{c.lastMessage}&rdquo;</span>
+                              ) : (
+                                <span className="italic">No messages yet. Click to initiate chat.</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
+                          {c.lastMessageTime && (
+                            <span className="text-[11px] text-gray-400 font-medium">
+                              {new Date(c.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setJobForChat(matchingJob);
+                            }}
+                            className="text-xs font-bold"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                            <span>{c.unreadCount > 0 ? `Reply (${c.unreadCount})` : 'Open Chat'}</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* TAB 2: EARNINGS & WALLET */}
@@ -1137,6 +1336,10 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
       <WorkerJobDetailsModal
         job={selectedJobForModal}
         onClose={() => setSelectedJobForModal(null)}
+        onOpenChat={(job) => {
+          setSelectedJobForModal(null);
+          setJobForChat(job);
+        }}
         onAction={(action, job) => {
           if (action === 'cancel') {
             setJobToCancel(job);
@@ -1188,6 +1391,15 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
         onMarkRead={handleMarkNotificationRead}
         onMarkAllRead={handleMarkAllRead}
       />
+
+      {/* 6. Two-Way Customer Chat Modal */}
+      {jobForChat && (
+        <WorkerChatModal
+          job={jobForChat}
+          onClose={() => setJobForChat(null)}
+          onMessagesRead={() => fetchConversations()}
+        />
+      )}
     </div>
   );
 }
