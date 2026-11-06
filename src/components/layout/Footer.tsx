@@ -56,7 +56,7 @@ export function Footer() {
 
           {/* Copyright */}
           <div className="text-xs text-[#576563] text-center md:text-right">
-            <span>&copy; {new Date().getFullYear()} Sahayak Technologies. All rights reserved.</span>
+            <span>&copy; 2026 Sahayak Technologies. All rights reserved.</span>
           </div>
         </div>
       </div>

@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Suspense } from 'react';
 import { Navbar, NavbarFallback } from '@/components/layout/Navbar';
-import { Footer } from '@/components/layout/Footer';
 import { BackgroundCubesGrid } from '@/components/ui/background-cubes-grid';
 
 // Robust offline-safe font variable fallbacks
@@ -73,8 +72,7 @@ export default function RootLayout({
         <Suspense fallback={<NavbarFallback />}>
           <Navbar />
         </Suspense>
-        <div className="flex-1 relative z-0 md:pl-[68px] transition-all">{children}</div>
-        <Footer />
+        <div className="flex-1 relative z-0">{children}</div>
       </body>
     </html>
   );
