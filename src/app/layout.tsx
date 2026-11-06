@@ -72,7 +72,7 @@ export default function RootLayout({
         <Suspense fallback={<NavbarFallback />}>
           <Navbar />
         </Suspense>
-        <div className="flex-1 relative z-0">{children}</div>
+        <div className="flex-1 relative">{children}</div>
       </body>
     </html>
   );

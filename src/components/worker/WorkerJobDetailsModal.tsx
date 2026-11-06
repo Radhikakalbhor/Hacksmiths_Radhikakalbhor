@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   ExternalLink,
+  MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,9 +25,11 @@ interface JobDetailsModalProps {
   onClose: () => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAction?: (action: 'accept' | 'reject' | 'cancel', job: any) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onOpenChat?: (job: any) => void;
 }
 
-export function WorkerJobDetailsModal({ job, onClose, onAction }: JobDetailsModalProps) {
+export function WorkerJobDetailsModal({ job, onClose, onAction, onOpenChat }: JobDetailsModalProps) {
   if (!job) return null;
 
   const booking = job.booking || null;
@@ -157,14 +160,30 @@ export function WorkerJobDetailsModal({ job, onClose, onAction }: JobDetailsModa
         ) : null}
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-          <Link
-            href={`/jobs/${job.id}`}
-            className="text-xs text-[#0D4A52] font-semibold hover:underline inline-flex items-center gap-1"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Live Job & Tracking View</span>
-          </Link>
+        <div className="flex items-center justify-between pt-4 border-t border-gray-100 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/jobs/${job.id}`}
+              className="text-xs text-[#0D4A52] font-semibold hover:underline inline-flex items-center gap-1"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Live Job & Tracking View</span>
+            </Link>
+            {onOpenChat && !isCancelled && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  onClose();
+                  onOpenChat(job);
+                }}
+                className="text-xs flex items-center gap-1"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-[#0D4A52]" />
+                <span>Message Customer</span>
+              </Button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             {isPending && onAction && (

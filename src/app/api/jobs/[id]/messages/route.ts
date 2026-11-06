@@ -11,6 +11,8 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { BookingService } from '@/lib/services/booking.service';
+import { NotificationService } from '@/lib/services/notification.service';
+import { isDesignatedCrossServiceWorkerId } from '@/lib/config/designated-workers';
 import { BookingState, ChatMessage } from '@/types/booking';
 
 interface RouteContext {
@@ -53,7 +55,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const booking = aiDetails.booking as BookingState | undefined;
 
     const isCustomer = job.customer_id === user.id;
-    const isWorker = booking?.workerId === user.id;
+    const isWorker =
+      booking?.workerId === user.id ||
+      (rawJob as { selected_worker_id?: string }).selected_worker_id === user.id ||
+      (rawJob as { assigned_worker_id?: string }).assigned_worker_id === user.id;
 
     if (!isCustomer && !isWorker) {
       return apiError('You are not authorized to view messages for this booking.', 403, 'FORBIDDEN');
@@ -61,10 +66,20 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     const messages = await BookingService.fetchMessages(serverClient, jobId);
 
+    const unreadCountForCustomer = messages.filter(
+      (m) => m.senderRole === 'worker' && !m.isRead
+    ).length;
+    const unreadCountForWorker = messages.filter(
+      (m) => m.senderRole === 'customer' && !m.isRead
+    ).length;
+
     return apiSuccess({
       jobId,
       messages,
       totalCount: messages.length,
+      unreadCountForCustomer,
+      unreadCountForWorker,
+      unreadCount: isCustomer ? unreadCountForCustomer : unreadCountForWorker,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Internal messaging error.';
@@ -125,28 +140,39 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const booking = aiDetails.booking as BookingState | undefined;
 
     const isCustomer = job.customer_id === user.id;
-    const isWorker = booking?.workerId === user.id;
+    const isWorker =
+      booking?.workerId === user.id ||
+      (rawJob as { selected_worker_id?: string }).selected_worker_id === user.id ||
+      (rawJob as { assigned_worker_id?: string }).assigned_worker_id === user.id;
 
     if (!isCustomer && !isWorker) {
       return apiError('You are not authorized to post messages on this booking.', 403, 'FORBIDDEN');
     }
 
+    const effectiveWorkerId =
+      booking?.workerId || (rawJob as { selected_worker_id?: string }).selected_worker_id;
+
     // Robust Demo Worker Detection
     let isDemoWorker = Boolean(booking?.isDemoWorker);
     let workerDisplayName = booking?.workerName || 'Professional Partner';
 
-    if (booking?.workerId && !isDemoWorker) {
+    // Strictly ensure designated cross-service workers are treated as REAL workers (no demo simulation replies)
+    if (effectiveWorkerId && isDesignatedCrossServiceWorkerId(effectiveWorkerId)) {
+      isDemoWorker = false;
+    }
+
+    if (effectiveWorkerId && !isDemoWorker) {
       if (
         workerDisplayName.includes('[DEMO]') ||
         workerDisplayName.toLowerCase().includes('demo') ||
-        (booking.workerPhone && booking.workerPhone.includes('99990000'))
+        (booking?.workerPhone && booking.workerPhone.includes('99990000'))
       ) {
         isDemoWorker = true;
       } else {
         const { data: wp } = await serverClient
           .from('worker_profiles')
           .select('bio, user_id')
-          .eq('user_id', booking.workerId)
+          .eq('user_id', effectiveWorkerId)
           .maybeSingle();
 
         if (wp?.bio && (wp.bio.includes('[DEMO]') || wp.bio.toLowerCase().includes('demonstration only'))) {
@@ -157,7 +183,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           const { data: prof } = await admin
             .from('profiles')
             .select('full_name, phone, email')
-            .eq('id', booking.workerId)
+            .eq('id', effectiveWorkerId)
             .maybeSingle();
 
           if (
@@ -195,7 +221,19 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     const senderRole = isCustomer ? 'customer' : 'worker';
-    const senderName = isCustomer ? 'Customer' : workerDisplayName.replace(/^\[DEMO\]\s*/i, '');
+    let senderName = isCustomer ? 'Customer' : workerDisplayName.replace(/^\[DEMO\]\s*/i, '');
+
+    // Retrieve sender's real name from profiles for clean display
+    if (admin) {
+      const { data: senderProf } = await admin
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (senderProf?.full_name) {
+        senderName = senderProf.full_name;
+      }
+    }
 
     const result = await BookingService.postMessage(serverClient, jobId, {
       jobId,
@@ -209,9 +247,41 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return apiError(result.error || 'Failed to save message.', 500, 'PERSISTENCE_FAILED');
     }
 
-    // Contextual demo-reply simulation for demo workers:
-    // When the customer sends a message and the worker is a demo worker,
-    // generate and persist a relevant contextual reply clearly labeled as Demo Simulation.
+    // Two-Way Notifications:
+    // 1. If customer sends message, notify the worker
+    if (isCustomer && effectiveWorkerId) {
+      try {
+        await NotificationService.sendNotification(supabase!, {
+          workerId: effectiveWorkerId,
+          type: 'SYSTEM',
+          title: `New message from ${senderName}`,
+          message: text.length > 60 ? text.substring(0, 57) + '...' : text,
+          jobId,
+          metadata: { subType: 'NEW_MESSAGE', jobId },
+        });
+      } catch (notifErr) {
+        console.warn('[Messages API] Worker notification notice:', notifErr);
+      }
+    }
+
+    // 2. If worker sends message, notify the customer
+    if (!isCustomer && job.customer_id) {
+      try {
+        await (serverClient as any).from('notifications').insert({
+          user_id: job.customer_id,
+          type: 'NEW_MESSAGE',
+          title: `New message from ${senderName}`,
+          message: text.length > 60 ? text.substring(0, 57) + '...' : text,
+          data: { jobId, workerId: user.id },
+        });
+      } catch {
+        // Ignore if customer notifications table does not exist
+      }
+    }
+
+    // Contextual demo-reply simulation for DEMO workers ONLY:
+    // Only triggers when the customer sends a message to an actual DEMO worker.
+    // If the sender is a worker, or if the worker is a real worker, no demo reply is generated.
     let demoReply: ChatMessage | null = null;
     if (isCustomer && isDemoWorker) {
       const lower = text.toLowerCase();
@@ -304,6 +374,67 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Internal messaging error.';
+    return apiError(msg, 500, 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+/**
+ * PATCH /api/jobs/[id]/messages
+ * Marks incoming messages as read for the authenticated party.
+ */
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
+  try {
+    const { id: jobId } = await params;
+    if (!jobId) {
+      return apiError('Job ID parameter is required.', 400, 'BAD_REQUEST');
+    }
+
+    const supabase = await getSupabaseServerClient(request);
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase!.auth.getUser();
+
+    if (authError || !user) {
+      return apiError('Authentication required.', 401, 'UNAUTHORIZED');
+    }
+
+    const admin = getSupabaseAdminClient();
+    const serverClient = admin || supabase!;
+
+    const { data: rawJob, error: jobError } = await serverClient
+      .from('jobs')
+      .select('*')
+      .eq('id', jobId)
+      .maybeSingle();
+
+    if (jobError || !rawJob) {
+      return apiError('Job not found.', 404, 'NOT_FOUND');
+    }
+
+    const job = rawJob as { customer_id: string; selected_worker_id?: string | null; ai_details?: unknown };
+    const aiDetails = (job.ai_details && typeof job.ai_details === 'object' ? job.ai_details : {}) as Record<string, unknown>;
+    const booking = aiDetails.booking as BookingState | undefined;
+
+    const isCustomer = job.customer_id === user.id;
+    const isWorker =
+      booking?.workerId === user.id ||
+      job.selected_worker_id === user.id ||
+      (rawJob as { assigned_worker_id?: string }).assigned_worker_id === user.id;
+
+    if (!isCustomer && !isWorker) {
+      return apiError('You are not authorized for this booking.', 403, 'FORBIDDEN');
+    }
+
+    const readerRole = isCustomer ? 'customer' : 'worker';
+    const res = await BookingService.markMessagesAsRead(serverClient, jobId, readerRole);
+
+    return apiSuccess({
+      success: true,
+      markedCount: res.markedCount,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Error marking messages as read.';
     return apiError(msg, 500, 'INTERNAL_SERVER_ERROR');
   }
 }
