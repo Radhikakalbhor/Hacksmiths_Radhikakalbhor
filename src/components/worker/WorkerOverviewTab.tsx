@@ -11,13 +11,13 @@ import {
   IndianRupee,
   User,
   Phone,
-  AlertCircle,
   CheckCircle2,
   XCircle,
   ExternalLink,
   ChevronRight,
-  ShieldCheck,
+  ChevronDown,
   Briefcase,
+  FileText,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -46,6 +46,19 @@ export function WorkerOverviewTab({
   onAction,
 }: WorkerOverviewTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<'upcoming' | 'pending' | 'accepted' | 'rejected'>('upcoming');
+  const [expandedJobIds, setExpandedJobIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (jobId: string) => {
+    setExpandedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
+      return next;
+    });
+  };
 
   const counts = {
     upcoming: categorizedJobs.upcoming.length,
@@ -152,151 +165,252 @@ export function WorkerOverviewTab({
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex flex-col gap-3">
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {currentJobs.map((job: any) => {
             const booking = job.booking || null;
             const isEmergency = job.urgency === 'emergency';
             const isSameDay = job.urgency === 'same_day' || job.urgency === 'urgent';
+            const isExpanded = expandedJobIds.has(job.id);
+            const agreedPrice = job.agreedPriceInr || job.accepted_price_inr || job.estimated_budget_inr || 500;
 
             return (
-              <Card key={job.id} className="p-5 flex flex-col justify-between space-y-4 hover:shadow-md transition">
-                <div className="space-y-3">
-                  {/* Top Bar: Category & Badges */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {job.category}
-                      </span>
-                      <h3 className="text-base font-bold text-[#152220] mt-1 line-clamp-1">{job.title}</h3>
+              <Card
+                key={job.id}
+                className="overflow-hidden border border-gray-200 transition-all hover:border-gray-300 hover:shadow-sm"
+              >
+                {/* Horizontal Long Card Header (Always Visible & Clickable) */}
+                <div
+                  onClick={() => toggleExpand(job.id)}
+                  className="p-4 sm:px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer select-none bg-white hover:bg-gray-50/80 transition"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleExpand(job.id);
+                    }
+                  }}
+                  aria-expanded={isExpanded}
+                >
+                  {/* Left: Category Badge & Title */}
+                  <div className="flex items-center gap-3 min-w-0 md:w-1/3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {job.category}
+                        </span>
+                        <Badge variant={isEmergency ? 'amber' : isSameDay ? 'teal' : 'neutral'}>
+                          {isSameDay ? 'Same Day' : isEmergency ? 'Emergency' : 'Standard'}
+                        </Badge>
+                      </div>
+                      <h3 className="text-base font-bold text-[#152220] mt-1 truncate">
+                        {job.title}
+                      </h3>
                     </div>
-                    <Badge variant={isEmergency ? 'amber' : isSameDay ? 'teal' : 'neutral'}>
-                      {isSameDay ? 'Same Day' : isEmergency ? 'Emergency' : 'Standard'}
-                    </Badge>
                   </div>
 
-                  {/* Customer & Location */}
-                  <div className="p-3 bg-[#FAF8F3] rounded-lg border border-[#E5DFD2] space-y-1 text-xs">
-                    <div className="flex items-center justify-between text-[#152220]">
-                      <span className="font-bold flex items-center gap-1">
-                        <User className="w-3 h-3 text-[#0D4A52]" />
-                        <span>{job.customerName || 'Customer'}</span>
+                  {/* Center: Customer, Location, and Schedule */}
+                  <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap md:flex-nowrap md:w-5/12">
+                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                      <User className="w-3.5 h-3.5 text-[#0D4A52] shrink-0" />
+                      <span className="font-semibold text-gray-800 truncate">
+                        {job.customerName || 'Customer'}
                       </span>
-                      {job.customerPhone && (
-                        <span className="text-teal-700 flex items-center gap-1 font-semibold">
-                          <Phone className="w-3 h-3" />
-                          <span>{job.customerPhone}</span>
-                        </span>
-                      )}
                     </div>
-                    <div className="flex items-center gap-1 text-gray-500">
-                      <MapPin className="w-3 h-3 text-teal-700 shrink-0" />
+
+                    <div className="flex items-center gap-1.5 min-w-0 truncate text-gray-500">
+                      <MapPin className="w-3.5 h-3.5 text-teal-700 shrink-0" />
                       <span className="truncate">{job.city} ({job.pincode})</span>
                     </div>
+
+                    <div className="flex items-center gap-1.5 min-w-0 truncate text-gray-500 hidden sm:flex">
+                      <Calendar className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span className="truncate">
+                        {job.scheduled_date || 'Flexible'} {job.scheduled_time_slot ? `(${job.scheduled_time_slot})` : ''}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Timing & Price Metrics */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 bg-gray-50 rounded border border-gray-100">
-                      <span className="text-[10px] text-gray-400 block">Scheduled Time</span>
-                      <div className="font-semibold text-gray-800 flex items-center gap-1 mt-0.5">
-                        <Calendar className="w-3 h-3 text-teal-600" />
-                        <span className="truncate">{job.scheduled_date || 'Flexible'} {job.scheduled_time_slot ? `(${job.scheduled_time_slot})` : ''}</span>
+                  {/* Right: Price & Expand Indicator */}
+                  <div className="flex items-center justify-between md:justify-end gap-4 md:w-1/4 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
+                    <div className="flex items-center gap-1 text-base font-extrabold text-[#217E66]">
+                      <IndianRupee className="w-4 h-4" />
+                      <span>{agreedPrice}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                      <span>{isExpanded ? 'Less' : 'Details'}</span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                          isExpanded ? 'rotate-180 text-teal-700' : ''
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded Details Body */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 bg-[#FAF8F3]/50 p-4 sm:p-5 space-y-4 animate-in fade-in duration-150">
+                    {/* Customer & Location Details Box */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-3 bg-white rounded-lg border border-[#E5DFD2] space-y-1 text-xs">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Customer Contact</span>
+                        <div className="flex items-center justify-between text-[#152220] pt-1">
+                          <span className="font-bold flex items-center gap-1">
+                            <User className="w-3.5 h-3.5 text-[#0D4A52]" />
+                            <span>{job.customerName || 'Customer'}</span>
+                          </span>
+                          {job.customerPhone && (
+                            <a
+                              href={`tel:${job.customerPhone}`}
+                              className="text-teal-700 hover:underline flex items-center gap-1 font-semibold"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Phone className="w-3 h-3" />
+                              <span>{job.customerPhone}</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-white rounded-lg border border-[#E5DFD2] space-y-1 text-xs">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Service Location</span>
+                        <div className="flex items-center gap-1.5 text-gray-700 pt-1">
+                          <MapPin className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                          <span className="truncate">{job.address || `${job.city} (${job.pincode})`}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-400">Pincode: {job.pincode}</div>
+                      </div>
+
+                      <div className="p-3 bg-white rounded-lg border border-[#E5DFD2] space-y-1 text-xs">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Schedule & Budget</span>
+                        <div className="flex items-center gap-1.5 text-gray-800 pt-1 font-semibold">
+                          <Calendar className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                          <span>{job.scheduled_date || 'Flexible'} {job.scheduled_time_slot ? `(${job.scheduled_time_slot})` : ''}</span>
+                        </div>
+                        <div className="text-[11px] text-emerald-700 font-bold flex items-center gap-0.5">
+                          <IndianRupee className="w-3 h-3" />
+                          <span>Agreed: ₹{agreedPrice}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="p-2 bg-gray-50 rounded border border-gray-100">
-                      <span className="text-[10px] text-gray-400 block">Agreed Price</span>
-                      <div className="font-bold text-[#217E66] flex items-center gap-1 mt-0.5">
-                        <IndianRupee className="w-3.5 h-3.5" />
-                        <span>₹{job.agreedPriceInr || job.accepted_price_inr || job.estimated_budget_inr || 500}</span>
+                    {/* Job Description / Notes if available */}
+                    {job.description && (
+                      <div className="p-3 bg-white rounded-lg border border-[#E5DFD2] text-xs text-gray-700 space-y-1">
+                        <div className="flex items-center gap-1 font-bold text-[#152220]">
+                          <FileText className="w-3.5 h-3.5 text-teal-700" />
+                          <span>Job Description & Scope</span>
+                        </div>
+                        <p className="text-gray-600 leading-relaxed">{job.description}</p>
+                      </div>
+                    )}
+
+                    {/* Cancellation Notice if available */}
+                    {(job.cancellation_reason || booking?.cancellationReason) && (
+                      <div className="text-xs bg-rose-50 text-rose-800 p-3 rounded-lg border border-rose-200">
+                        <span className="font-bold">Cancellation Reason: </span>
+                        <span>{job.cancellation_reason || booking?.cancellationReason}</span>
+                      </div>
+                    )}
+
+                    {/* Expanded Action Buttons Footer */}
+                    <div className="pt-3 border-t border-[#E5DFD2] flex flex-wrap items-center justify-between gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenDetails(job);
+                        }}
+                      >
+                        View Full Modal Details
+                      </Button>
+
+                      <div className="flex items-center gap-2">
+                        {activeSubTab === 'pending' && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAction('reject', job);
+                              }}
+                              className="text-rose-600 hover:bg-rose-50"
+                            >
+                              Decline Offer
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAction('accept', job);
+                              }}
+                            >
+                              Accept Offer
+                            </Button>
+                          </>
+                        )}
+
+                        {activeSubTab === 'upcoming' && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenCancel(job);
+                              }}
+                              className="text-rose-600 hover:bg-rose-50 text-xs"
+                            >
+                              Cancel Booking
+                            </Button>
+                            <Link href={`/jobs/${job.id}`} onClick={(e) => e.stopPropagation()}>
+                              <Button size="sm" variant="secondary">
+                                <span>Open Live Tracker</span>
+                                <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                              </Button>
+                            </Link>
+                          </>
+                        )}
+
+                        {activeSubTab === 'accepted' && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenCancel(job);
+                              }}
+                              className="text-rose-600 hover:bg-rose-50 text-xs"
+                            >
+                              Cancel Booking
+                            </Button>
+                            <Link href={`/jobs/${job.id}`} onClick={(e) => e.stopPropagation()}>
+                              <Button size="sm" variant="primary">
+                                <span>Continue Job</span>
+                                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                              </Button>
+                            </Link>
+                          </>
+                        )}
+
+                        {activeSubTab === 'rejected' && (
+                          <Link href={`/jobs/${job.id}`} onClick={(e) => e.stopPropagation()}>
+                            <Button size="sm" variant="ghost">
+                              View History
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </div>
-
-                  {/* Stage or cancellation notice */}
-                  {job.cancellation_reason || booking?.cancellationReason ? (
-                    <div className="text-[11px] bg-rose-50 text-rose-800 p-2 rounded border border-rose-200">
-                      <span className="font-bold">Reason: </span>
-                      <span>{job.cancellation_reason || booking?.cancellationReason}</span>
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* Card Actions */}
-                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => onOpenDetails(job)}>
-                    Details
-                  </Button>
-
-                  <div className="flex items-center gap-1.5">
-                    {activeSubTab === 'pending' && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onAction('reject', job)}
-                          className="text-rose-600"
-                        >
-                          Decline
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => onAction('accept', job)}
-                        >
-                          Accept Offer
-                        </Button>
-                      </>
-                    )}
-
-                    {activeSubTab === 'upcoming' && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onOpenCancel(job)}
-                          className="text-rose-600 text-xs"
-                        >
-                          Cancel
-                        </Button>
-                        <Link href={`/jobs/${job.id}`}>
-                          <Button size="sm" variant="secondary">
-                            <span>Open Tracker</span>
-                            <ExternalLink className="w-3 h-3 ml-1" />
-                          </Button>
-                        </Link>
-                      </>
-                    )}
-
-                    {activeSubTab === 'accepted' && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onOpenCancel(job)}
-                          className="text-rose-600 text-xs"
-                        >
-                          Cancel
-                        </Button>
-                        <Link href={`/jobs/${job.id}`}>
-                          <Button size="sm" variant="primary">
-                            <span>Continue Job</span>
-                            <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                          </Button>
-                        </Link>
-                      </>
-                    )}
-
-                    {activeSubTab === 'rejected' && (
-                      <Link href={`/jobs/${job.id}`}>
-                        <Button size="sm" variant="ghost">
-                          View History
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                </div>
+                )}
               </Card>
             );
           })}
@@ -305,4 +419,3 @@ export function WorkerOverviewTab({
     </div>
   );
 }
-

@@ -220,6 +220,39 @@ export function getSameDayTimeOptions(referenceDate: Date = new Date()): TimeOpt
 }
 
 /**
+ * Calculates the immediate emergency arrival window (within 1-2 hours) based on Kolkata time.
+ * E.g., at 12:30 PM -> "1:00 PM – 2:00 PM"
+ */
+export function getEmergencyArrivalWindow(referenceDate: Date = new Date()): {
+  startTime: string;
+  endTime: string;
+  displayWindow: string;
+  slotValue: string;
+} {
+  const now = getKolkataNow(referenceDate);
+  const currentTotalMinutes = now.hours * 60 + now.minutes;
+
+  // Round up to nearest 30 mins with at least 15 mins buffer
+  const startMin = Math.ceil((currentTotalMinutes + 15) / 30) * 30;
+  const endMin = startMin + 60; // 1-hour arrival window
+
+  const startHour = Math.floor(startMin / 60) % 24;
+  const startMinute = startMin % 60;
+  const endHour = Math.floor(endMin / 60) % 24;
+  const endMinute = endMin % 60;
+
+  const startTime = formatTime12h(startHour, startMinute);
+  const endTime = formatTime12h(endHour, endMinute);
+
+  return {
+    startTime,
+    endTime,
+    displayWindow: `${startTime} – ${endTime}`,
+    slotValue: startTime,
+  };
+}
+
+/**
  * Returns individual booking times for "Emergency" urgency.
  * Prioritizes the earliest times (within 1-2 hours) while allowing later slots today.
  */

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { LiquidMetalButton } from '@/components/ui/liquid-metal-button';
+import { TextGenerateEffect } from '@/components/ui/text-generate-effect';
 
 // Web Speech API interface declarations for browser compatibility
 interface SpeechRecognitionResultItem {
@@ -208,9 +209,10 @@ export function HeroSection() {
             </h1>
 
             {/* Value Prop Description */}
-            <p className="text-[0.95rem] sm:text-[1.07rem] lg:text-[1.28rem] text-[#4A5855] leading-relaxed max-w-2xl font-normal">
-              From quick fixes to routine maintenance, get fair offers and book trusted local pros with confidence.
-            </p>
+            <TextGenerateEffect
+              words="From quick fixes to routine maintenance, get fair offers and book trusted local pros with confidence."
+              className="text-[0.95rem] sm:text-[1.07rem] lg:text-[1.28rem] text-[#4A5855] leading-relaxed max-w-2xl font-normal"
+            />
 
             {/* Trust Indicators in a Straight Line on the Left with comfortable padding and substance */}
             <div className="pt-2 flex flex-wrap items-center justify-start gap-3 sm:gap-4 text-sm sm:text-base font-semibold text-[#152220]">
@@ -233,8 +235,8 @@ export function HeroSection() {
           <div className="lg:col-span-4 flex items-center justify-center lg:justify-center py-6 lg:py-0 lg:-translate-y-8 xl:-translate-y-10">
             <LiquidMetalButton
               href="/post-job"
-              label="Post a Job with AI"
-              width={200}
+              label="Assign a Job"
+              width={180}
             />
           </div>
         </div>

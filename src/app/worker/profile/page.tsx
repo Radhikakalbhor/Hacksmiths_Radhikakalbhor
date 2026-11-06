@@ -98,7 +98,7 @@ export default function WorkerProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FBF9F5] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="flex items-center gap-2 text-xs text-[#576563]">
           <RefreshCw className="w-4 h-4 animate-spin text-[#0D4A52]" />
           <span>Loading Worker Profile...</span>
@@ -108,7 +108,7 @@ export default function WorkerProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FBF9F5] text-[#152220] py-8">
+    <div className="min-h-screen bg-transparent text-[#152220] py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5DFD2]">

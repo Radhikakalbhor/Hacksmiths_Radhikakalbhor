@@ -79,18 +79,6 @@ export function WorkerWalletTab({
 
   return (
     <div className="space-y-6">
-      {wallet?.isDemo && (
-        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <strong>Sample Wallet Active:</strong> Populated with realistic earnings and transactions for demonstration. Demo balances cannot be withdrawn. Complete real customer requests to receive withdrawable payouts.
-            </span>
-          </div>
-          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-200 text-amber-900 rounded-md">Sample Demo Data</span>
-        </div>
-      )}
-
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Available Balance */}

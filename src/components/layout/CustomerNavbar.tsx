@@ -4,7 +4,18 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { Menu, X, PlusCircle, CalendarClock, Wrench, ShieldCheck, Calculator, User, LogOut } from 'lucide-react';
+import {
+  IconPlus,
+  IconCalendar,
+  IconTools,
+  IconCalculator,
+  IconShieldCheck,
+  IconUser,
+  IconArrowLeft,
+  IconLogin,
+} from '@tabler/icons-react';
+import { motion } from 'motion/react';
+import { Sidebar, SidebarBody, SidebarLink } from '@/components/ui/sidebar';
 import { CustomerProfileModal } from '@/components/profile/CustomerProfileModal';
 
 interface CustomerNavbarProps {
@@ -13,8 +24,57 @@ interface CustomerNavbarProps {
   onSignOut: () => Promise<void>;
 }
 
+export const CustomerLogo = () => {
+  return (
+    <Link
+      href="/post-job"
+      className="relative z-20 flex items-center space-x-2.5 py-1 text-sm font-normal group"
+    >
+      <Image
+        src="/images/logo.png"
+        alt="Sahayak Logo"
+        width={32}
+        height={32}
+        className="w-7 h-7 rounded-lg object-cover shadow-xs border border-[#E5DFD2]/60 shrink-0 group-hover:scale-105 transition-transform"
+        priority
+      />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex flex-col overflow-hidden"
+      >
+        <span className="font-extrabold text-base text-[#0D4A52] tracking-tight whitespace-pre leading-none group-hover:text-[#072F35] transition">
+          Sahayak
+        </span>
+        <span className="text-[9px] text-[#576563] tracking-wide whitespace-pre mt-0.5">
+          Trusted help. Fair work.
+        </span>
+      </motion.div>
+    </Link>
+  );
+};
+
+export const CustomerLogoIcon = () => {
+  return (
+    <Link
+      href="/post-job"
+      className="relative z-20 flex items-center justify-center py-1 group"
+      title="Sahayak"
+    >
+      <Image
+        src="/images/logo.png"
+        alt="Sahayak Logo"
+        width={32}
+        height={32}
+        className="w-7 h-7 rounded-lg object-cover shadow-xs border border-[#E5DFD2]/60 shrink-0 group-hover:scale-105 transition-transform"
+        priority
+      />
+    </Link>
+  );
+};
+
 export function CustomerNavbar({ userEmail, displayName, onSignOut }: CustomerNavbarProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const pathname = usePathname();
 
@@ -24,221 +84,191 @@ export function CustomerNavbar({ userEmail, displayName, onSignOut }: CustomerNa
   const isPricingActive = pathname === '/fair-pricing' || pathname === '/pricing';
   const isSafetyActive = pathname === '/safety';
 
+  const customerLinks = [
+    {
+      label: 'Assign a Job',
+      href: '/post-job',
+      active: isPostJobActive,
+      icon: (
+        <IconPlus
+          className={`h-5 w-5 shrink-0 transition-colors ${
+            isPostJobActive ? 'text-[#0D4A52]' : 'text-[#217E66]'
+          }`}
+        />
+      ),
+    },
+    {
+      label: 'My Bookings',
+      href: '/bookings',
+      active: isBookingsActive,
+      icon: (
+        <IconCalendar
+          className={`h-5 w-5 shrink-0 transition-colors ${
+            isBookingsActive ? 'text-[#0D4A52]' : 'text-neutral-600'
+          }`}
+        />
+      ),
+    },
+    {
+      label: 'Services',
+      href: '/services',
+      active: isServicesActive,
+      icon: (
+        <IconTools
+          className={`h-5 w-5 shrink-0 transition-colors ${
+            isServicesActive ? 'text-[#0D4A52]' : 'text-neutral-600'
+          }`}
+        />
+      ),
+    },
+    {
+      label: 'Fair Pricing',
+      href: '/fair-pricing',
+      active: isPricingActive,
+      icon: (
+        <IconCalculator
+          className={`h-5 w-5 shrink-0 transition-colors ${
+            isPricingActive ? 'text-[#0D4A52]' : 'text-neutral-600'
+          }`}
+        />
+      ),
+    },
+    {
+      label: 'Safety & OTP',
+      href: '/safety',
+      active: isSafetyActive,
+      icon: (
+        <IconShieldCheck
+          className={`h-5 w-5 shrink-0 transition-colors ${
+            isSafetyActive ? 'text-[#0D4A52]' : 'text-neutral-600'
+          }`}
+        />
+      ),
+    },
+  ];
+
   return (
     <>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-18">
-          {/* Brand Name & Tagline */}
-          <Link href="/post-job" className="flex items-center gap-2.5 group">
-            <Image
-              src="/images/logo.png"
-              alt="Sahayak Logo"
-              width={38}
-              height={38}
-              className="w-9 h-9 rounded-xl object-cover shadow-xs border border-[#E5DFD2]/60 group-hover:scale-105 transition-transform"
-              priority
-            />
-            <div className="flex flex-col">
-              <span className="font-extrabold text-xl text-[#0D4A52] tracking-tight group-hover:text-[#072F35] transition-colors leading-none">
-                Sahayak
-              </span>
-              <p className="text-[10px] text-[#576563] hidden sm:block font-medium mt-0.5">Trusted help. Fair work.</p>
-            </div>
-          </Link>
-
-          {/* Desktop Nav Links - Customer Focused */}
-          <nav className="hidden md:flex items-center p-1 bg-white/95 backdrop-blur-sm border border-[#E5DFD2] rounded-full shadow-xs gap-0.5 lg:gap-1">
-            <Link
-              href="/post-job"
-              className={`text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all whitespace-nowrap ${
-                isPostJobActive
-                  ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold shadow-xs'
-                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80'
-              }`}
-            >
-              <PlusCircle className={`w-3.5 h-3.5 ${isPostJobActive ? 'text-[#0D4A52]' : 'text-[#217E66]'}`} />
-              <span>Post a Job</span>
-            </Link>
-
-            <Link
-              href="/bookings"
-              className={`text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all whitespace-nowrap ${
-                isBookingsActive
-                  ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold shadow-xs'
-                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80'
-              }`}
-            >
-              <CalendarClock className={`w-3.5 h-3.5 ${isBookingsActive ? 'text-[#0D4A52]' : 'text-[#217E66]'}`} />
-              <span>My Bookings</span>
-            </Link>
-
-            <Link
-              href="/services"
-              className={`text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all whitespace-nowrap ${
-                isServicesActive
-                  ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold shadow-xs'
-                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80'
-              }`}
-            >
-              <Wrench className={`w-3.5 h-3.5 ${isServicesActive ? 'text-[#0D4A52]' : 'text-[#217E66]'}`} />
-              <span>Services</span>
-            </Link>
-
-            <Link
-              href="/fair-pricing"
-              className={`text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all whitespace-nowrap ${
-                isPricingActive
-                  ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold shadow-xs'
-                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80'
-              }`}
-            >
-              <Calculator className={`w-3.5 h-3.5 ${isPricingActive ? 'text-[#0D4A52]' : 'text-[#217E66]'}`} />
-              <span>Fair Pricing</span>
-            </Link>
-
-            <Link
-              href="/safety"
-              className={`text-xs lg:text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all whitespace-nowrap ${
-                isSafetyActive
-                  ? 'bg-[#EBF4F3] text-[#0D4A52] font-semibold shadow-xs'
-                  : 'text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]/80'
-              }`}
-            >
-              <ShieldCheck className={`w-3.5 h-3.5 ${isSafetyActive ? 'text-[#0D4A52]' : 'text-[#217E66]'}`} />
-              <span>Safety & OTP</span>
-            </Link>
-          </nav>
-
-          {/* Right Action Area */}
-          <div className="hidden md:flex items-center gap-3">
-            {userEmail ? (
-              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setIsProfileModalOpen(true)}
-                  className="flex items-center gap-1.5 hover:text-[#0D4A52] transition-colors cursor-pointer text-left"
-                  title="View & Edit Profile"
-                  aria-label="Open customer profile"
-                >
-                  <User className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
-                  <span className="font-semibold max-w-[130px] truncate">
-                    {displayName || userEmail}
-                  </span>
-                </button>
-                <div className="w-px h-3.5 bg-[#E5DFD2] my-auto" />
-                <button
-                  type="button"
-                  onClick={onSignOut}
-                  className="p-1 hover:text-red-600 hover:bg-red-50 rounded transition-colors text-[#576563] cursor-pointer"
-                  title="Sign Out"
-                  aria-label="Sign out"
-                >
-                  <LogOut className="w-3 h-3" />
-                </button>
+      {/* Desktop Left Collapsible Sidebar */}
+      <div className="fixed top-0 left-0 bottom-0 z-50 h-screen hidden md:block">
+        <Sidebar open={open} setOpen={setOpen}>
+          <SidebarBody className="justify-between gap-10 h-full bg-white/95 backdrop-blur-md border-r border-[#E5DFD2] shadow-xs">
+            <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-auto">
+              {open ? <CustomerLogo /> : <CustomerLogoIcon />}
+              <div className="mt-8 flex flex-col gap-1.5">
+                {customerLinks.map((link, idx) => (
+                  <SidebarLink key={idx} link={link} active={link.active} />
+                ))}
               </div>
-            ) : (
-              <Link
-                href="/login?role=customer"
-                className="text-xs font-semibold px-4 py-2 rounded-full bg-[#0D4A52] text-white hover:bg-[#072F35] shadow-xs transition"
-              >
-                Sign In
-              </Link>
-            )}
-          </div>
-
-          {/* Mobile Menu Toggle Button */}
-          <div className="flex md:hidden items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6] transition-colors cursor-pointer"
-              aria-label="Toggle navigation menu"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
-        </div>
+            </div>
+            <div className="border-t border-[#E5DFD2] pt-3 flex flex-col gap-1">
+              {userEmail ? (
+                <>
+                  <SidebarLink
+                    link={{
+                      label: displayName || userEmail.split('@')[0],
+                      icon: (
+                        <div className="h-6 w-6 rounded-full bg-[#0D4A52] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                          {(displayName || userEmail)[0]?.toUpperCase()}
+                        </div>
+                      ),
+                      onClick: () => setIsProfileModalOpen(true),
+                    }}
+                  />
+                  <SidebarLink
+                    link={{
+                      label: 'Sign Out',
+                      icon: <IconArrowLeft className="h-5 w-5 text-rose-600 shrink-0" />,
+                      onClick: onSignOut,
+                    }}
+                  />
+                </>
+              ) : (
+                <SidebarLink
+                  link={{
+                    label: 'Sign In',
+                    href: '/login?role=customer',
+                    icon: <IconLogin className="h-5 w-5 text-[#0D4A52] shrink-0" />,
+                  }}
+                />
+              )}
+            </div>
+          </SidebarBody>
+        </Sidebar>
       </div>
 
-      {/* Mobile Menu Drawer */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-b border-[#E5DFD2] bg-white/98 backdrop-blur-md px-4 pt-2 pb-6 space-y-3">
-          <Link
-            href="/post-job"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm font-semibold px-3 py-2 rounded-lg text-[#0D4A52] hover:bg-[#EBF4F3]"
-          >
-            Post a Job
-          </Link>
-          <Link
-            href="/bookings"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm font-semibold px-3 py-2 rounded-lg text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]"
-          >
-            My Bookings
-          </Link>
-          <Link
-            href="/services"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm font-semibold px-3 py-2 rounded-lg text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]"
-          >
-            Services
-          </Link>
-          <Link
-            href="/fair-pricing"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm font-semibold px-3 py-2 rounded-lg text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]"
-          >
-            Fair Pricing
-          </Link>
-          <Link
-            href="/safety"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm font-semibold px-3 py-2 rounded-lg text-[#576563] hover:text-[#0D4A52] hover:bg-[#F3EFE6]"
-          >
-            Safety & OTP
-          </Link>
-
-          <div className="pt-2 border-t border-[#E5DFD2]">
-            {userEmail ? (
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    setIsProfileModalOpen(true);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="text-xs font-semibold text-[#0D4A52] flex items-center gap-1.5"
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>{displayName || userEmail}</span>
-                </button>
-                <button
-                  onClick={onSignOut}
-                  className="text-xs font-medium text-red-600 hover:underline flex items-center gap-1"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
-                </button>
+      {/* Mobile Top Navbar with Drawer */}
+      <div className="md:hidden sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-[#E5DFD2]">
+        <Sidebar open={open} setOpen={setOpen}>
+          <SidebarBody className="justify-between gap-8">
+            <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-auto">
+              <CustomerLogo />
+              <div className="mt-8 flex flex-col gap-2">
+                {customerLinks.map((link, idx) => (
+                  <SidebarLink
+                    key={idx}
+                    link={link}
+                    active={link.active}
+                    onClick={() => setOpen(false)}
+                  />
+                ))}
               </div>
-            ) : (
-              <Link
-                href="/login?role=customer"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block text-center text-xs font-semibold py-2 px-4 rounded-full bg-[#0D4A52] text-white"
-              >
-                Sign In
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+            <div className="border-t border-[#E5DFD2] pt-4 flex flex-col gap-2">
+              {userEmail ? (
+                <>
+                  <SidebarLink
+                    link={{
+                      label: displayName || userEmail.split('@')[0],
+                      icon: (
+                        <div className="h-6 w-6 rounded-full bg-[#0D4A52] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                          {(displayName || userEmail)[0]?.toUpperCase()}
+                        </div>
+                      ),
+                      onClick: () => {
+                        setOpen(false);
+                        setIsProfileModalOpen(true);
+                      },
+                    }}
+                  />
+                  <SidebarLink
+                    link={{
+                      label: 'Sign Out',
+                      icon: <IconArrowLeft className="h-5 w-5 text-rose-600 shrink-0" />,
+                      onClick: async () => {
+                        setOpen(false);
+                        await onSignOut();
+                      },
+                    }}
+                  />
+                </>
+              ) : (
+                <SidebarLink
+                  link={{
+                    label: 'Sign In',
+                    href: '/login?role=customer',
+                    icon: <IconLogin className="h-5 w-5 text-[#0D4A52] shrink-0" />,
+                    onClick: () => setOpen(false),
+                  }}
+                />
+              )}
+            </div>
+          </SidebarBody>
+        </Sidebar>
+      </div>
 
       {/* Profile Modal */}
-      <CustomerProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-      />
+      {isProfileModalOpen && (
+        <CustomerProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          onProfileUpdated={() => {
+            if (typeof window !== 'undefined') {
+              window.location.reload();
+            }
+          }}
+        />
+      )}
     </>
   );
 }
-
