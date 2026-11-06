@@ -18,7 +18,6 @@ import { StatusBadge } from '@/components/admin/StatusBadge';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useToast } from '@/components/admin/ToastContext';
 import dynamic from 'next/dynamic';
-import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
