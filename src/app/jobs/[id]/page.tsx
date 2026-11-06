@@ -93,12 +93,18 @@ interface NearbyWorker {
   reputation_score: number;
   total_completed_jobs: number;
   is_available: boolean;
-  distance_meters: number;
+  distance_meters: number | null;
+  worker_source?: 'real' | 'demo';
+  is_demo?: boolean;
+  distance_pending?: boolean;
+  email_verified?: boolean;
   average_rating?: number | null;
   review_count?: number;
   quote_inr?: number | null;
   fair_price_min_inr?: number | null;
   fair_price_max_inr?: number | null;
+  is_cross_service_demo?: boolean;
+  cross_service_badge?: string;
 }
 
 interface BenchmarkData {
@@ -287,10 +293,30 @@ function JobDiscoveryContent() {
         if (b.customerOtp) {
           setCustomerOtp(b.customerOtp);
         }
-        if (b.isDemoWorker && b.simulatedSecondsRemaining) {
-          setSimulatedCountdown(b.simulatedSecondsRemaining);
-        } else if (b.estimatedArrivalMinutes) {
-          setSimulatedCountdown(b.estimatedArrivalMinutes * 60);
+
+        if (b.isDemoWorker) {
+          // Demo worker flow: exactly preserved simulated countdown
+          if (b.simulatedSecondsRemaining) {
+            setSimulatedCountdown(b.simulatedSecondsRemaining);
+          } else if (b.estimatedArrivalMinutes) {
+            setSimulatedCountdown(b.estimatedArrivalMinutes * 60);
+          }
+        } else {
+          // REAL WORKER:
+          // ETA timer and arrival countdown activate ONLY after worker confirms acceptance!
+          if (b.stage === 'accepted' || b.stage === 'on_the_way') {
+            const travelDurationSec = (b.estimatedArrivalMinutes || 20) * 60;
+            const startTimeMs = b.accepted_at
+              ? new Date(b.accepted_at).getTime()
+              : b.stageUpdatedAt
+              ? new Date(b.stageUpdatedAt).getTime()
+              : Date.now();
+            const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startTimeMs) / 1000));
+            setSimulatedCountdown(Math.max(0, travelDurationSec - elapsedSeconds));
+          } else {
+            // Before acceptance ('requested') or when arrived/cancelled: NO countdown
+            setSimulatedCountdown(0);
+          }
         }
       }
     } catch (err) {
@@ -359,6 +385,16 @@ function JobDiscoveryContent() {
   useEffect(() => {
     loadJob();
   }, [loadJob]);
+
+  // Real-time synchronization polling: check job status every 3s while awaiting partner acceptance
+  useEffect(() => {
+    if (booking?.stage === 'requested') {
+      const interval = setInterval(() => {
+        loadJob();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [booking?.stage, loadJob]);
 
   // 2. Fetch Nearby Workers once Job is Loaded
   useEffect(() => {
@@ -440,6 +476,7 @@ function JobDiscoveryContent() {
   useEffect(() => {
     if (
       !booking ||
+      (!booking.isDemoWorker && booking.stage === 'requested') ||
       booking.stage === 'arrived' ||
       booking.stage === 'in_progress' ||
       booking.stage === 'completed' ||
@@ -1073,12 +1110,20 @@ function JobDiscoveryContent() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-white/20 text-white">
-                    Direct Booking Confirmed
+                  <span
+                    className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                      booking.stage === 'requested'
+                        ? 'bg-amber-400 text-amber-950 font-black'
+                        : 'bg-white/20 text-white'
+                    }`}
+                  >
+                    {booking.stage === 'requested'
+                      ? 'Awaiting Partner Confirmation'
+                      : 'Direct Booking Confirmed'}
                   </span>
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-                  {booking.stage === 'requested' && 'Finding & Assigning Professional...'}
+                  {booking.stage === 'requested' && `Booking Request Sent to ${cleanDisplayName(booking.workerName)}`}
                   {booking.stage === 'accepted' && `${cleanDisplayName(booking.workerName)} is Confirmed`}
                   {booking.stage === 'on_the_way' && `${cleanDisplayName(booking.workerName)} is On The Way`}
                   {booking.stage === 'arrived' && `${cleanDisplayName(booking.workerName)} Has Arrived!`}
@@ -1087,7 +1132,9 @@ function JobDiscoveryContent() {
                   {booking.stage === 'cancelled' && 'Booking Cancelled'}
                 </h2>
                 <p className="text-xs text-white/80">
-                  {booking.stage === 'arrived'
+                  {booking.stage === 'requested'
+                    ? 'Waiting for the worker partner to accept your booking offer. Page synchronizes automatically.'
+                    : booking.stage === 'arrived'
                     ? 'Please share your 4-digit start OTP with the professional.'
                     : `Estimated arrival travel time: ~${remainingMinutes > 0 ? remainingMinutes : travelMinutes} mins.`}
                 </p>
@@ -1203,14 +1250,27 @@ function JobDiscoveryContent() {
           {booking.stage === 'cancelled' && (
             <div className="p-5 mx-6 mt-4 rounded-2xl bg-red-50/90 border border-red-200 text-red-900 text-xs flex items-start gap-3 shadow-sm">
               <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <h4 className="font-bold text-red-950 text-sm">Booking Cancelled</h4>
+              <div className="space-y-1.5 flex-1">
+                <h4 className="font-bold text-red-950 text-sm">Booking Cancelled / Declined</h4>
                 <p className="text-[#576563]">
                   <strong>Reason:</strong> {booking.cancellationReason || 'No specific reason provided.'}
                 </p>
                 <p className="text-[11px] text-red-700 leading-relaxed">
-                  Worker assignment and real-time tracking have been terminated. You can post a new request or book another professional from the marketplace at any time.
+                  Worker assignment has been released. You can select another professional partner from the marketplace below.
                 </p>
+                <div className="pt-1.5">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="text-xs font-bold bg-[#0D4A52] hover:bg-[#152220] text-white"
+                    onClick={() => {
+                      setBooking(null);
+                      setCustomerOtp(null);
+                    }}
+                  >
+                    Select Another Professional
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -1303,6 +1363,16 @@ function JobDiscoveryContent() {
                       </span>
                     )}
                   </div>
+                ) : booking.stage === 'requested' ? (
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-center space-y-1.5">
+                    <div className="flex items-center justify-center gap-1.5 text-amber-900 font-bold text-xs">
+                      <Clock className="w-4 h-4 text-amber-700 animate-spin" />
+                      <span>Offer Sent • Awaiting Partner Response</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      Your 4-digit start OTP will appear here as soon as <strong>{cleanDisplayName(booking.workerName)}</strong> accepts your service request.
+                    </p>
+                  </div>
                 ) : (
                   <div className="p-3 bg-white rounded-xl border border-gray-200 text-center text-xs text-[#576563]">
                     {booking.otpVerified ? (
@@ -1325,12 +1395,28 @@ function JobDiscoveryContent() {
                       <Navigation className="w-4 h-4 text-[#217E66]" />
                       <span>Estimated Arrival</span>
                     </span>
-                    <Badge variant={booking.stage === 'cancelled' ? 'red' : booking.stage === 'arrived' ? 'green' : 'amber'}>
-                      {booking.stage === 'cancelled' ? 'CANCELLED' : booking.stage === 'arrived' ? 'ARRIVED' : `${remainingMinutes > 0 ? remainingMinutes : travelMinutes} MINS`}
+                    <Badge variant={
+                      booking.stage === 'cancelled'
+                        ? 'red'
+                        : booking.stage === 'requested' && !booking.isDemoWorker
+                        ? 'amber'
+                        : booking.stage === 'arrived'
+                        ? 'green'
+                        : 'amber'
+                    }>
+                      {booking.stage === 'cancelled'
+                        ? 'CANCELLED'
+                        : booking.stage === 'requested' && !booking.isDemoWorker
+                        ? 'WAITING CONFIRMATION'
+                        : booking.stage === 'arrived'
+                        ? 'ARRIVED'
+                        : `${remainingMinutes > 0 ? remainingMinutes : travelMinutes} MINS`}
                     </Badge>
                   </div>
                   <p className="text-[11px] text-[#576563] leading-relaxed">
-                    Estimated arrival based on distance and average urban transit. Actual traffic and routes may differ.
+                    {booking.stage === 'requested' && !booking.isDemoWorker
+                      ? 'Waiting for worker partner to confirm the booking request. Estimated travel time will activate once confirmed.'
+                      : 'Estimated arrival based on distance and average urban transit. Actual traffic and routes may differ.'}
                   </p>
                 </div>
 
@@ -1338,10 +1424,12 @@ function JobDiscoveryContent() {
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[#576563] flex items-center gap-1">
                       <Timer className="w-3.5 h-3.5 text-[#217E66]" />
-                      <span>Countdown:</span>
+                      <span>{booking.stage === 'requested' && !booking.isDemoWorker ? 'Status:' : 'Countdown:'}</span>
                     </span>
                     <span className="font-mono font-bold text-[#0D4A52]">
-                      {booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed' || booking.stage === 'cancelled'
+                      {booking.stage === 'requested' && !booking.isDemoWorker
+                        ? 'Waiting for Confirmation'
+                        : booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed' || booking.stage === 'cancelled'
                         ? '00:00'
                         : `${Math.floor(simulatedCountdown / 60)
                             .toString()
@@ -1351,10 +1439,18 @@ function JobDiscoveryContent() {
 
                   <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-1000 ${booking.stage === 'cancelled' ? 'bg-red-400' : 'bg-[#217E66]'}`}
+                      className={`h-full transition-all duration-1000 ${
+                        booking.stage === 'cancelled'
+                          ? 'bg-red-400'
+                          : booking.stage === 'requested' && !booking.isDemoWorker
+                          ? 'bg-amber-300'
+                          : 'bg-[#217E66]'
+                      }`}
                       style={{
                         width:
                           booking.stage === 'cancelled'
+                            ? '0%'
+                            : booking.stage === 'requested' && !booking.isDemoWorker
                             ? '0%'
                             : booking.stage === 'arrived' || booking.stage === 'in_progress' || booking.stage === 'completed'
                             ? '100%'
@@ -1366,7 +1462,7 @@ function JobDiscoveryContent() {
 
                 {booking.stage === 'cancelled' && (
                   <div className="text-[10px] text-red-700 font-semibold">
-                    🛑 Tracking simulation ended due to cancellation.
+                    🛑 {booking.cancellationReason ? `Request declined: ${booking.cancellationReason}` : 'Booking cancelled.'}
                   </div>
                 )}
               </div>
@@ -1596,9 +1692,10 @@ function JobDiscoveryContent() {
           /* Worker Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {workers.map((w) => {
-              const distanceKm = (w.distance_meters / 1000).toFixed(1);
-              const travelCalc = calculateEstimatedTravelTimeMinutes(w.distance_meters);
+              const distanceKm = w.distance_meters != null ? (w.distance_meters / 1000).toFixed(1) : null;
+              const travelCalc = calculateEstimatedTravelTimeMinutes(w.distance_meters || 2500);
               const isAssignedToThis = booking?.workerId === w.worker_id;
+              const isDemo = w.is_demo || w.worker_source === 'demo';
 
               return (
                 <Card
@@ -1632,12 +1729,46 @@ function JobDiscoveryContent() {
                           <h4 className="text-sm font-bold text-[#152220] truncate">
                             {cleanDisplayName(w.full_name)}
                           </h4>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
-                            {distanceKm} km
-                          </span>
+                          {w.distance_pending || distanceKm == null ? (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                              📍 Location Pending
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                              {distanceKm} km
+                            </span>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-[11px] text-[#576563] mt-0.5">
+                        {/* Hybrid Real vs Demo Badges */}
+                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                          {isDemo ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wide">
+                              Demo Profile
+                            </span>
+                          ) : (
+                            <>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wide">
+                                Real Worker
+                              </span>
+                              {w.is_cross_service_demo && (
+                                <span
+                                  className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 uppercase tracking-wide"
+                                  title="Demonstration partner available across all service categories using the genuine real-worker booking workflow"
+                                >
+                                  Cross-Service Demo
+                                </span>
+                              )}
+                              {w.email_verified && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 uppercase tracking-wide">
+                                  Verified Email
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-[11px] text-[#576563] mt-1">
                           <span className="capitalize">{formatWorkerCategory(w.primary_category, w.skills)}</span>
                           <span>•</span>
                           <span>{w.years_experience} yrs exp</span>
@@ -1657,15 +1788,20 @@ function JobDiscoveryContent() {
                             </span>
                           </div>
                         ) : (
-                          <span className="text-[11px] font-medium text-[#83928E] bg-gray-100 px-2 py-0.5 rounded-full">
-                            Not rated yet
+                          <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Star className="w-3 h-3 text-teal-600 fill-teal-600" />
+                            ★ New Partner (0 Jobs)
                           </span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-1 text-[11px] text-[#0D4A52] font-semibold">
                         <Clock className="w-3 h-3 text-[#217E66]" />
-                        <span>~{travelCalc.minutes} mins arrival</span>
+                        <span>
+                          {w.distance_pending || w.distance_meters == null
+                            ? 'On Request'
+                            : `~${travelCalc.minutes} mins arrival`}
+                        </span>
                       </div>
                     </div>
 
@@ -1776,13 +1912,35 @@ function JobDiscoveryContent() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <h4 className="text-base font-bold text-[#152220] truncate">
-                  {cleanDisplayName(bookingConfirmWorker.full_name)}
-                </h4>
-                <div className="flex items-center gap-2 text-xs text-[#576563]">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-base font-bold text-[#152220] truncate">
+                    {cleanDisplayName(bookingConfirmWorker.full_name)}
+                  </h4>
+                  {bookingConfirmWorker.is_demo || bookingConfirmWorker.worker_source === 'demo' ? (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wide shrink-0">
+                      Demo Profile
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wide">
+                        Real Worker
+                      </span>
+                      {bookingConfirmWorker.is_cross_service_demo && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 uppercase tracking-wide">
+                          Cross-Service Demo
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[#576563] mt-0.5">
                   <span className="capitalize">{formatWorkerCategory(bookingConfirmWorker.primary_category, bookingConfirmWorker.skills)}</span>
                   <span>•</span>
-                  <span>{(bookingConfirmWorker.distance_meters / 1000).toFixed(1)} km away</span>
+                  <span>
+                    {bookingConfirmWorker.distance_meters != null
+                      ? `${(bookingConfirmWorker.distance_meters / 1000).toFixed(1)} km away`
+                      : 'Location Pending'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1 text-xs mt-0.5">
                   {bookingConfirmWorker.review_count && bookingConfirmWorker.review_count > 0 && bookingConfirmWorker.average_rating ? (
@@ -1794,8 +1952,9 @@ function JobDiscoveryContent() {
                       </span>
                     </div>
                   ) : (
-                    <span className="text-[11px] text-[#83928E] bg-gray-100 px-2 py-0.5 rounded-full">
-                      Not rated yet
+                    <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Star className="w-3 h-3 text-teal-600 fill-teal-600" />
+                      ★ New Partner (0 Jobs)
                     </span>
                   )}
                 </div>
@@ -1821,7 +1980,9 @@ function JobDiscoveryContent() {
               <div className="flex justify-between items-center py-2 border-b border-gray-100">
                 <span className="text-[#576563]">Estimated Arrival Time:</span>
                 <span className="font-bold text-[#217E66]">
-                  ~{calculateEstimatedTravelTimeMinutes(bookingConfirmWorker.distance_meters).minutes} mins (Traffic may vary)
+                  {bookingConfirmWorker.distance_meters != null
+                    ? `~${calculateEstimatedTravelTimeMinutes(bookingConfirmWorker.distance_meters).minutes} mins (Traffic may vary)`
+                    : 'Dispatched upon partner confirmation'}
                 </span>
               </div>
 
@@ -2120,9 +2281,27 @@ function JobDiscoveryContent() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-[#152220]">
-                    {cleanDisplayName(activeWorkerProfile.full_name)}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-[#152220]">
+                      {cleanDisplayName(activeWorkerProfile.full_name)}
+                    </h3>
+                    {activeWorkerProfile.is_demo || activeWorkerProfile.worker_source === 'demo' ? (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wide">
+                        Demo Profile
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wide">
+                          Real Worker
+                        </span>
+                        {activeWorkerProfile.is_cross_service_demo && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 uppercase tracking-wide">
+                            Cross-Service Demo
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-[#217E66] font-semibold capitalize">
                       {formatWorkerCategory(activeWorkerProfile.primary_category, activeWorkerProfile.skills)}
@@ -2157,7 +2336,9 @@ function JobDiscoveryContent() {
                       </span>
                     </>
                   ) : (
-                    <span className="text-xs text-[#83928E] font-normal">Not rated yet</span>
+                    <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded">
+                      ★ New Partner (0 Jobs)
+                    </span>
                   )}
                 </span>
               </div>

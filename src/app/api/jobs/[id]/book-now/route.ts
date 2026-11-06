@@ -10,7 +10,9 @@ import { requireRole } from '@/lib/auth/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { BookingService } from '@/lib/services/booking.service';
 import { PricingService } from '@/lib/services/pricing.service';
+import { NotificationService } from '@/lib/services/notification.service';
 import { calculateEstimatedTravelTimeMinutes, BookingState } from '@/types/booking';
+import { isDesignatedCrossServiceWorkerId } from '@/lib/config/designated-workers';
 
 export async function POST(
   request: NextRequest,
@@ -97,17 +99,27 @@ export async function POST(
       workerExp = Number(workerProfile.years_experience || 3);
       workerCategory = workerProfile.primary_category || job.category;
 
+      if (workerProfile.worker_source === 'demo' || workerProfile.is_demo === true) {
+        isDemoWorker = true;
+      }
+      if (workerProfile.worker_source === 'real' || workerProfile.is_demo === false) {
+        isDemoWorker = false;
+      }
+
       if (workerProfile.bio && (workerProfile.bio.includes('[DEMO]') || workerProfile.bio.toLowerCase().includes('demonstration only'))) {
         isDemoWorker = true;
       }
 
       if (workerProfile.profiles) {
-        const p = workerProfile.profiles as { full_name?: string; phone?: string; avatar_url?: string; email?: string };
+        const p = workerProfile.profiles as { full_name?: string; phone?: string; avatar_url?: string; email?: string; user_source?: string };
         workerName = p.full_name || workerName;
         workerPhone = p.phone || null;
         workerAvatar = p.avatar_url || null;
         if (p.email?.includes('sahayak.demo.internal')) {
           isDemoWorker = true;
+        }
+        if (p.user_source === 'real') {
+          isDemoWorker = false;
         }
       }
     }
@@ -122,6 +134,9 @@ export async function POST(
         if (p.email?.includes('sahayak.demo.internal')) {
           isDemoWorker = true;
         }
+        if (p.user_source === 'real') {
+          isDemoWorker = false;
+        }
       }
     }
 
@@ -131,6 +146,13 @@ export async function POST(
       (workerPhone && workerPhone.includes('99990000'))
     ) {
       isDemoWorker = true;
+    }
+
+    // Explicitly guarantee real booking workflow for designated cross-service workers
+    if (isDesignatedCrossServiceWorkerId(workerId)) {
+      isDemoWorker = false;
+      // Save the customer's actual requested service category
+      workerCategory = job.category;
     }
 
     const cleanWorkerName = workerName.replace(/^\[DEMO\]\s*/i, '').replace(/^DEMO\s*[-–—]\s*/i, '').trim();
@@ -178,13 +200,21 @@ export async function POST(
     const distanceMeters = payload.distanceMeters || 2500;
     const travelCalc = calculateEstimatedTravelTimeMinutes(distanceMeters);
 
-    // 5. Generate secure arrival OTP and persist hash
-    const { plainOtp, expiresAt } = await BookingService.provisionJobStartOtp(supabase!, jobId);
+    // 5. Build persistent booking state based on whether worker is Real vs Demo
+    let plainOtp: string | undefined;
+    let expiresAt: string | undefined;
 
-    // 6. Build persistent booking state
+    if (isDemoWorker) {
+      // Demo worker instant auto-dispatch: generate start OTP immediately
+      const otpRes = await BookingService.provisionJobStartOtp(supabase!, jobId);
+      plainOtp = otpRes.plainOtp;
+      expiresAt = otpRes.expiresAt;
+    }
+
     const bookingState: BookingState = {
-      stage: 'accepted',
+      stage: isDemoWorker ? 'accepted' : 'requested',
       stageUpdatedAt: new Date().toISOString(),
+      accepted_at: isDemoWorker ? new Date().toISOString() : null,
       workerId,
       workerName: cleanWorkerName,
       workerCategory,
@@ -201,14 +231,16 @@ export async function POST(
       otpVerified: false,
     };
 
-    // 7. Update Job atomically: assign worker, record price, update ai_details
+    // 6. Update Job atomically: assign worker, record price, update ai_details
     const rawAi = (job as { ai_details?: unknown }).ai_details;
     const aiDetails = (rawAi && typeof rawAi === 'object' ? rawAi : {}) as Record<string, unknown>;
+
+    const nextJobStatus = isDemoWorker ? 'assigned' : 'posted';
 
     const { error: updateError } = await supabase!
       .from('jobs')
       .update({
-        status: 'assigned',
+        status: nextJobStatus,
         selected_worker_id: workerId,
         accepted_price_inr: agreedPrice,
         ai_details: {
@@ -223,13 +255,41 @@ export async function POST(
       return apiError('Failed to record booking.', 500, 'DATABASE_ERROR', updateError.message);
     }
 
-    return apiSuccess({
-      message: 'Booking confirmed successfully. Worker has been dispatched.',
-      booking: bookingState,
-      startOtp: plainOtp, // Provided strictly to the authorized customer
-      otpExpiresAt: expiresAt,
-      travelEstimate: travelCalc,
-    }, 201);
+    // 7. If Real Worker, create an in-app notification for the partner
+    if (!isDemoWorker) {
+      try {
+        await NotificationService.sendNotification(supabase!, {
+          workerId,
+          type: 'NEW_OFFER',
+          title: 'New Service Booking Request',
+          message: `A homeowner has requested your service for ${job.category} at ₹${agreedPrice}. View Pending Offers to respond.`,
+          jobId,
+          metadata: { customerId: user.id, agreedPriceInr: agreedPrice },
+        });
+      } catch (notifErr) {
+        console.warn('[book-now] Notification notice:', notifErr);
+      }
+
+      return apiSuccess(
+        {
+          message: 'Booking request sent to professional partner. Awaiting partner acceptance.',
+          booking: bookingState,
+          travelEstimate: travelCalc,
+        },
+        201
+      );
+    }
+
+    return apiSuccess(
+      {
+        message: 'Booking confirmed successfully. Worker has been dispatched.',
+        booking: bookingState,
+        startOtp: plainOtp,
+        otpExpiresAt: expiresAt,
+        travelEstimate: travelCalc,
+      },
+      201
+    );
   } catch (error) {
     console.error('[POST /api/jobs/[id]/book-now] Unexpected error:', error);
     return apiError('Internal server error occurred.', 500, 'INTERNAL_SERVER_ERROR');

@@ -182,6 +182,9 @@ export class BookingService {
       ...currentBooking,
       stage: targetStage,
       stageUpdatedAt: new Date().toISOString(),
+      accepted_at: targetStage === 'accepted' ? currentBooking.accepted_at || new Date().toISOString() : currentBooking.accepted_at,
+      rejected_at: targetStage === 'cancelled' ? currentBooking.rejected_at || new Date().toISOString() : currentBooking.rejected_at,
+      simulatedSecondsRemaining: targetStage === 'cancelled' ? 0 : currentBooking.simulatedSecondsRemaining,
       cancellationReason: cancellationReason || currentBooking.cancellationReason || null,
     };
 

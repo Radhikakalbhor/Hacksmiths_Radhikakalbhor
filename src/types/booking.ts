@@ -30,6 +30,8 @@ export interface BookingState {
   otpVerified: boolean;
   verifiedAt?: string | null;
   cancellationReason?: string | null;
+  accepted_at?: string | null;
+  rejected_at?: string | null;
 }
 
 export interface ChatMessage {

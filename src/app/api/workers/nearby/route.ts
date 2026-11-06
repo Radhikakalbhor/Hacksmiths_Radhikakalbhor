@@ -147,8 +147,15 @@ export async function GET(request: NextRequest) {
 
       enrichedWorkers = workers.map((w) => {
         const stats = reviewStatsMap.get(w.worker_id);
-        const avgRating = stats ? stats.avgRating : null;
-        const reviewCount = stats ? stats.count : 0;
+        const isRealWorker = w.worker_source === 'real' || !w.is_demo;
+        let avgRating = stats ? stats.avgRating : null;
+        let reviewCount = stats ? stats.count : 0;
+
+        // Demo workers retain their simulated reputation score; real workers preserve authentic 0-review state
+        if (!isRealWorker && !stats && w.reputation_score) {
+          avgRating = Number(w.reputation_score);
+          reviewCount = Number(w.total_completed_jobs || 12);
+        }
 
         let quoteInr: number | null = null;
         let fairMin: number | null = null;

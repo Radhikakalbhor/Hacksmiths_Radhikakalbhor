@@ -5,6 +5,8 @@
 
 export type UserRole = 'customer' | 'worker' | 'admin' | 'ADMIN';
 
+export type UserSource = 'real' | 'demo';
+
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended';
 
 export interface UserProfile {
@@ -16,6 +18,7 @@ export interface UserProfile {
   role: UserRole;
   verificationStatus: VerificationStatus;
   primaryCity: string;
+  userSource?: UserSource;
   isSuspended?: boolean;
   suspendedReason?: string;
   createdAt: string;
@@ -38,6 +41,10 @@ export interface WorkerProfile extends UserProfile {
   hourlyRateInr?: number;
   fixedRateEstimateInr?: number;
   isAvailable: boolean;
+  isPubliclyVisible?: boolean;
+  workerSource?: UserSource;
+  isDemo?: boolean;
+  isCrossServiceDemo?: boolean;
   governmentIdVerified: boolean;
   backgroundCheckVerified: boolean;
   reputationScore: number; // 0.0 to 5.0

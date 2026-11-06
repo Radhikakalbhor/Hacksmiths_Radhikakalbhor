@@ -151,6 +151,10 @@ export async function GET(
 
             for (let i = 0; i < nearbyCandidates.length; i++) {
               const w = nearbyCandidates[i];
+              // Real registered workers submit their own bids; only demo candidates provide instant simulated bids
+              if (w.worker_source === 'real' || !w.is_demo) {
+                continue;
+              }
               const quoteRes = PricingService.calculateWorkerQuoteForJob(w, job);
               const laborCost = Math.round(quoteRes.quoteInr * 0.75);
               const materialsEstimate = quoteRes.quoteInr - laborCost;

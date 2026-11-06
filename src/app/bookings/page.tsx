@@ -112,6 +112,14 @@ function getStageBadge(stage: string, status: string) {
       </Badge>
     );
   }
+  if (stage === 'requested') {
+    return (
+      <Badge variant="amber" className="flex items-center gap-1">
+        <Clock className="w-3.5 h-3.5 animate-spin" />
+        <span>Waiting for Confirmation</span>
+      </Badge>
+    );
+  }
   return (
     <Badge variant="teal" className="flex items-center gap-1">
       <CheckCircle2 className="w-3.5 h-3.5" />

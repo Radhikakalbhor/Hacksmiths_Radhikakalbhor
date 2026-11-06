@@ -62,6 +62,7 @@ function LoginContent() {
   const [primaryCategory, setPrimaryCategory] = useState(SERVICE_CATEGORIES[0].id);
   const [yearsExperience, setYearsExperience] = useState('2');
   const [bio, setBio] = useState('');
+  const [verifiedSession, setVerifiedSession] = useState<{ accessToken?: string; user?: any } | null>(null);
 
   // Status & error states
   const [loading, setLoading] = useState(false);
@@ -307,6 +308,7 @@ function LoginContent() {
           }
         }
         setOtpSent(true);
+        setVerifiedSession(null);
         setOtpCode('');
         setCooldown(60);
         setOtpRequestedAt(Date.now());
@@ -317,6 +319,64 @@ function LoginContent() {
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'An unexpected error occurred sending OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const executeCompleteWorkerRegistration = async (
+    accessToken?: string,
+    authUser?: { id?: string; email?: string }
+  ) => {
+    setLoading(true);
+    setErrorMsg(null);
+
+    const cleanEmail = authUser?.email || email.trim().toLowerCase();
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+
+      const compRes = await fetch('/api/auth/worker/complete-registration', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          phone: phoneNumber.trim(),
+          primaryCategory,
+          yearsExperience: parseInt(yearsExperience, 10) || 0,
+          bio: bio.trim(),
+          email: cleanEmail,
+        }),
+      });
+
+      const compData = await compRes.json();
+      if (!compRes.ok || !compData.success) {
+        const rawErr = compData.error;
+        const errMsg =
+          typeof rawErr === 'string'
+            ? rawErr
+            : rawErr?.message || compData.message || 'Failed to complete partner profile setup. Please try again.';
+        setErrorMsg(errMsg);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        sessionStorage.removeItem('sahayak_pending_worker_reg');
+      } catch {}
+
+      setSuccessMsg('Partner registration verified and completed! Redirecting to Partner Dashboard...');
+      setTimeout(() => {
+        router.push('/worker/dashboard');
+        router.refresh();
+      }, 800);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to finalize partner registration.');
     } finally {
       setLoading(false);
     }
@@ -357,21 +417,16 @@ function LoginContent() {
     setLoading(true);
 
     try {
-      // 1. Authoritative OTP Verification with correct GoTrue type
-      // New Partner Registration generates a 'signup' OTP in GoTrue.
-      // Existing Worker Sign In generates an 'email' (magic link) OTP in GoTrue.
-      const isNewPartner = role === 'worker' && isRegisteringWorker;
-      const primaryType: 'signup' | 'email' = isNewPartner ? 'signup' : 'email';
-      const fallbackType: 'signup' | 'email' = isNewPartner ? 'email' : 'signup';
-
+      // 1. Authoritative OTP Verification
+      // For all email OTPs sent via signInWithOtp, GoTrue registers the verification token under type 'email'.
+      // We pass 'email' as primary, with a resilient fallback to 'signup' if needed.
       let verifyResult = await supabase.auth.verifyOtp({
         email: cleanEmail,
         token: cleanCode,
-        type: primaryType,
+        type: 'email',
       });
 
-      // If the primary type fails (e.g. existing customer upgrading where GoTrue generated 'email' OTP),
-      // attempt fallback verification type before returning an error
+      // If 'email' type fails, try 'signup' fallback before treating as invalid
       if (
         verifyResult.error &&
         (verifyResult.error.message?.toLowerCase().includes('token') ||
@@ -381,7 +436,7 @@ function LoginContent() {
         const fallbackResult = await supabase.auth.verifyOtp({
           email: cleanEmail,
           token: cleanCode,
-          type: fallbackType,
+          type: 'signup',
         });
 
         if (!fallbackResult.error && fallbackResult.data?.session) {
@@ -402,14 +457,11 @@ function LoginContent() {
           setErrorMsg('Too many verification attempts. Please wait a few minutes before retrying.');
         } else if (errorText.includes('network') || errorText.includes('failed to fetch') || errorText.includes('fetch failed')) {
           setErrorMsg('Network error connecting to authentication service. Please check your internet connection.');
-        } else if (errorCode === 'otp_expired' || errorText.includes('expired')) {
+        } else if (isTimeExpired) {
           setErrorMsg('The verification code has expired. Please click "Resend Code" to receive a fresh code.');
-        } else if (errorText.includes('invalid') || errorCode === 'validation_failed') {
-          if (isTimeExpired) {
-            setErrorMsg('The verification code has expired. Please click "Resend Code" to receive a fresh code.');
-          } else {
-            setErrorMsg(`Invalid verification code. Please check your email and make sure you entered all ${SUPABASE_OTP_LENGTH} digits correctly.`);
-          }
+        } else if (errorCode === 'otp_expired' || errorText.includes('expired') || errorText.includes('invalid') || errorCode === 'validation_failed') {
+          // If within the validity window, GoTrue's generic 'otp_expired' indicates mismatched or invalid code digits
+          setErrorMsg(`Invalid verification code. Please check your email and make sure you entered all ${SUPABASE_OTP_LENGTH} digits correctly.`);
         } else {
           setErrorMsg(error.message);
         }
@@ -425,35 +477,11 @@ function LoginContent() {
 
       // 1. New Partner Registration: provision authoritative profile & worker_profiles
       if (role === 'worker' && isRegisteringWorker) {
-        const compRes = await fetch('/api/auth/worker/complete-registration', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fullName: fullName.trim(),
-            phone: phoneNumber.trim(),
-            primaryCategory,
-            yearsExperience: parseInt(yearsExperience, 10) || 0,
-            bio: bio.trim(),
-            email: cleanEmail,
-          }),
+        setVerifiedSession({
+          accessToken: data.session.access_token,
+          user: data.user,
         });
-
-        const compData = await compRes.json();
-        if (!compRes.ok || !compData.success) {
-          setErrorMsg(compData.error?.message || 'Failed to complete partner profile setup. Please try again.');
-          setLoading(false);
-          return;
-        }
-
-        try {
-          sessionStorage.removeItem('sahayak_pending_worker_reg');
-        } catch {}
-
-        setSuccessMsg('Partner registration verified and completed! Redirecting to Partner Dashboard...');
-        setTimeout(() => {
-          router.push('/worker/dashboard');
-          router.refresh();
-        }, 800);
+        await executeCompleteWorkerRegistration(data.session.access_token, data.user);
         return;
       }
 
@@ -667,6 +695,7 @@ function LoginContent() {
           onClick={() => {
             setRole('customer');
             setIsRegisteringWorker(false);
+            setVerifiedSession(null);
             setErrorMsg(null);
             setSuccessMsg(null);
           }}
@@ -682,6 +711,7 @@ function LoginContent() {
           type="button"
           onClick={() => {
             setRole('worker');
+            setVerifiedSession(null);
             setErrorMsg(null);
             setSuccessMsg(null);
           }}
@@ -702,6 +732,7 @@ function LoginContent() {
             type="button"
             onClick={() => {
               setIsRegisteringWorker(false);
+              setVerifiedSession(null);
               setErrorMsg(null);
             }}
             className={`pb-1 transition-colors ${
@@ -716,6 +747,7 @@ function LoginContent() {
             type="button"
             onClick={() => {
               setIsRegisteringWorker(true);
+              setVerifiedSession(null);
               setErrorMsg(null);
             }}
             className={`pb-1 transition-colors ${
@@ -799,7 +831,126 @@ function LoginContent() {
 
       {/* Form Content */}
       {authMode === 'otp' ? (
-        !otpSent ? (
+        verifiedSession && role === 'worker' && isRegisteringWorker ? (
+          <div className="space-y-4">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-800">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>
+                Verification code confirmed! Please review your details below and click &quot;Complete Partner Registration&quot; to finalize setup.
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#152220] mb-1">
+                Full Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="e.g. Ramesh Kumar Sharma"
+                className="w-full p-2.5 text-xs rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#152220] mb-1">
+                Mobile Phone (India 10-digit) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="tel"
+                required
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="e.g. 9876543210"
+                maxLength={14}
+                className="w-full p-2.5 text-xs rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#152220] mb-1">
+                  Primary Trade <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={primaryCategory}
+                  onChange={(e) => setPrimaryCategory(e.target.value as typeof primaryCategory)}
+                  className="w-full p-2.5 text-xs rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none bg-white"
+                >
+                  {SERVICE_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#152220] mb-1">
+                  Experience (Years) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  max={50}
+                  value={yearsExperience}
+                  onChange={(e) => setYearsExperience(e.target.value)}
+                  className="w-full p-2.5 text-xs rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#152220] mb-1">
+                Brief Bio / Skills Summary <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                rows={2}
+                required
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="e.g., Licensed electrician specializing in domestic wiring and MCB upgrades..."
+                className="w-full p-2.5 text-xs rounded-xl border border-[#E5DFD2] focus:ring-2 focus:ring-[#0D4A52] outline-none resize-none"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                type="button"
+                variant="secondary"
+                className="py-2.5 text-xs font-semibold border-[#E5DFD2]"
+                onClick={() => {
+                  setVerifiedSession(null);
+                  setOtpSent(false);
+                  setOtpCode('');
+                }}
+              >
+                Start Over
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => executeCompleteWorkerRegistration(verifiedSession.accessToken, verifiedSession.user)}
+                className="flex-1 justify-center gap-2 py-2.5 text-xs font-semibold"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Completing Setup...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Complete Partner Registration</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : !otpSent ? (
           <form onSubmit={handleSendOtp} className="space-y-4">
             {isRegisteringWorker && (
               <>
@@ -899,8 +1050,9 @@ function LoginContent() {
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
-                    if (otpSent) {
+                    if (otpSent || verifiedSession) {
                       setOtpSent(false);
+                      setVerifiedSession(null);
                       setOtpCode('');
                       setOtpRequestedAt(null);
                       setOtpRequestedEmail('');
@@ -946,6 +1098,7 @@ function LoginContent() {
                       sessionStorage.removeItem('sahayak_pending_worker_reg');
                     } catch {}
                     setOtpSent(false);
+                    setVerifiedSession(null);
                     setOtpCode('');
                     setOtpRequestedAt(null);
                     setOtpRequestedEmail('');

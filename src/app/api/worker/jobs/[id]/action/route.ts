@@ -87,6 +87,20 @@ export async function POST(
         return apiError(`Cannot accept a job with status '${job.status}'.`, 400, 'INVALID_STATE');
       }
 
+      // Generate start OTP for the customer if not already present
+      let plainOtp = booking?.customerOtp;
+      if (!plainOtp) {
+        try {
+          const otpResult = await BookingService.provisionJobStartOtp(client, jobId);
+          plainOtp = otpResult.plainOtp;
+        } catch (otpErr) {
+          console.warn('[Worker Job Action] Notice: Could not provision Start OTP:', otpErr);
+        }
+      }
+
+      // Persist authoritative acceptance timestamp; prevent duplicate acceptance calls from resetting the clock
+      const acceptedAt = booking?.accepted_at || new Date().toISOString();
+
       const updatedBooking: BookingState = {
         ...(booking || {
           workerId: user.id,
@@ -100,6 +114,8 @@ export async function POST(
         }),
         stage: 'accepted',
         stageUpdatedAt: new Date().toISOString(),
+        accepted_at: acceptedAt,
+        customerOtp: plainOtp,
       };
 
       await client
@@ -122,12 +138,28 @@ export async function POST(
         jobId,
       });
 
+      // Also notify customer of acceptance
+      if (job.customer_id) {
+        try {
+          await client.from('notifications').insert({
+            user_id: job.customer_id,
+            type: 'OFFER_ACCEPTED',
+            title: 'Booking Accepted by Worker Partner!',
+            message: `${updatedBooking.workerName || 'Your worker partner'} accepted your booking request for ${job.category}.`,
+            data: { jobId, workerId: user.id },
+          });
+        } catch (notifErr) {
+          console.warn('[Worker Job Action] Notice: customer notification:', notifErr);
+        }
+      }
+
       return apiSuccess({ success: true, status: 'accepted' });
     }
 
     // 2. ACTION: REJECT
     if (payload.action === 'reject') {
       const reason = payload.reason || 'Worker unavailable';
+      const rejectedAt = booking?.rejected_at || new Date().toISOString();
 
       const updatedBooking: BookingState = {
         ...(booking || {
@@ -142,7 +174,9 @@ export async function POST(
         }),
         stage: 'cancelled',
         stageUpdatedAt: new Date().toISOString(),
+        rejected_at: rejectedAt,
         cancellationReason: reason,
+        simulatedSecondsRemaining: 0,
       };
 
       await client
@@ -171,6 +205,21 @@ export async function POST(
         message: `You declined this job offer (Reason: ${reason}).`,
         jobId,
       });
+
+      // Also notify customer of rejection
+      if (job.customer_id) {
+        try {
+          await client.from('notifications').insert({
+            user_id: job.customer_id,
+            type: 'OFFER_REJECTED',
+            title: 'Booking Request Declined',
+            message: `The worker partner was unable to accept your request (${reason}). Please select another professional partner.`,
+            data: { jobId, workerId: user.id },
+          });
+        } catch (notifErr) {
+          console.warn('[Worker Job Action] Notice: customer rejection notification:', notifErr);
+        }
+      }
 
       return apiSuccess({ success: true, status: 'rejected' });
     }

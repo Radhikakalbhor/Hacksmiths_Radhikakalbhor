@@ -52,6 +52,7 @@ export interface Database {
           role: UserRole;
           verification_status: VerificationStatus;
           primary_city: string;
+          user_source?: 'real' | 'demo';
           is_suspended?: boolean;
           suspended_reason?: string | null;
           created_at: string;
@@ -66,6 +67,7 @@ export interface Database {
           role?: UserRole;
           verification_status?: VerificationStatus;
           primary_city?: string;
+          user_source?: 'real' | 'demo';
           is_suspended?: boolean;
           suspended_reason?: string | null;
           created_at?: string;
@@ -79,6 +81,7 @@ export interface Database {
           role?: UserRole;
           verification_status?: VerificationStatus;
           primary_city?: string;
+          user_source?: 'real' | 'demo';
           is_suspended?: boolean;
           suspended_reason?: string | null;
           updated_at?: string;
@@ -98,6 +101,8 @@ export interface Database {
           fixed_rate_estimate_inr: number | null;
           is_available: boolean;
           is_publicly_visible: boolean;
+          worker_source?: 'real' | 'demo';
+          is_demo?: boolean;
           government_id_verified: boolean;
           background_check_verified: boolean;
           reputation_score: number;
@@ -118,6 +123,8 @@ export interface Database {
           fixed_rate_estimate_inr?: number | null;
           is_available?: boolean;
           is_publicly_visible?: boolean;
+          worker_source?: 'real' | 'demo';
+          is_demo?: boolean;
           government_id_verified?: boolean;
           background_check_verified?: boolean;
           reputation_score?: number;
@@ -136,6 +143,8 @@ export interface Database {
           fixed_rate_estimate_inr?: number | null;
           is_available?: boolean;
           is_publicly_visible?: boolean;
+          worker_source?: 'real' | 'demo';
+          is_demo?: boolean;
           government_id_verified?: boolean;
           background_check_verified?: boolean;
           reputation_score?: number;
