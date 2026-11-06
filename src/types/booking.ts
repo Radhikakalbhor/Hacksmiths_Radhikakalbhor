@@ -43,6 +43,8 @@ export interface ChatMessage {
   text: string;
   createdAt: string;
   isRead?: boolean;
+  isReadByCustomer?: boolean;
+  isReadByWorker?: boolean;
 }
 
 export const VALID_BOOKING_TRANSITIONS: Record<BookingStage, readonly BookingStage[]> = {

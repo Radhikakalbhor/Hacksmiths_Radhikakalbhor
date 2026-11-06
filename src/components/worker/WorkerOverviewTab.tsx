@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Briefcase,
+  MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -36,6 +37,9 @@ interface WorkerOverviewTabProps {
   onOpenCancel: (job: any) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAction: (action: 'accept' | 'reject', job: any) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onOpenChat?: (job: any) => void;
+  unreadCountsByJob?: Record<string, number>;
 }
 
 export function WorkerOverviewTab({
@@ -44,6 +48,8 @@ export function WorkerOverviewTab({
   onOpenDetails,
   onOpenCancel,
   onAction,
+  onOpenChat,
+  unreadCountsByJob,
 }: WorkerOverviewTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<'upcoming' | 'pending' | 'accepted' | 'rejected'>('upcoming');
 
@@ -224,10 +230,28 @@ export function WorkerOverviewTab({
                 </div>
 
                 {/* Card Actions */}
-                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => onOpenDetails(job)}>
-                    Details
-                  </Button>
+                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Button size="sm" variant="ghost" onClick={() => onOpenDetails(job)}>
+                      Details
+                    </Button>
+                    {onOpenChat && activeSubTab !== 'rejected' && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onOpenChat(job)}
+                        className="text-xs flex items-center gap-1"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-[#0D4A52]" />
+                        <span>Message Customer</span>
+                        {unreadCountsByJob && (unreadCountsByJob[job.id] || 0) > 0 && (
+                          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
+                            {unreadCountsByJob[job.id]}
+                          </span>
+                        )}
+                      </Button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5">
                     {activeSubTab === 'pending' && (
