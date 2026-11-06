@@ -112,7 +112,8 @@ async function promote() {
   // Update auth metadata
   try {
     await supabase.auth.admin.updateUserById(target.id, {
-      user_metadata: { role: 'ADMIN' },
+      user_metadata: { role: 'admin' },
+      app_metadata: { role: 'admin' },
     });
   } catch (err) {
     console.warn('[WARN] Auth user metadata update warning (non-fatal):', err.message);
