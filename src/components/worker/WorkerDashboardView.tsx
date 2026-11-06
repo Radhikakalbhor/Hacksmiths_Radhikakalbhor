@@ -628,12 +628,23 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
                 }`}
               >
                 <SlidersHorizontal className="w-4 h-4" />
-                <span>Admin Controls</span>
+                <span>Platform Policy</span>
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-2">
+            {(userRole === 'admin' || searchParams.get('admin') === 'true') && (
+              <Link
+                href="/admin"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0D4A52] hover:bg-[#072F35] text-white text-xs font-semibold transition shadow-xs whitespace-nowrap"
+                title="Open full Admin Operations Console"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Open full Admin Panel</span>
+                <span className="sm:hidden">Admin Panel</span>
+              </Link>
+            )}
             <Button
               size="sm"
               variant="secondary"
@@ -1111,7 +1122,7 @@ export function WorkerDashboardView({ initialTab }: WorkerDashboardViewProps = {
           </div>
         )}
 
-        {/* TAB 5: ADMIN CONTROLS */}
+        {/* TAB 5: PLATFORM POLICY (ADMIN CONTROLS) */}
         {workerNavTab === 'admin' && (
           <AdminControlPanel
             initialSettings={settings}

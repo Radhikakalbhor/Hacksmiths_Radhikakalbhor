@@ -9,10 +9,11 @@ import { CustomerProfileModal } from '@/components/profile/CustomerProfileModal'
 interface CustomerNavbarProps {
   userEmail: string | null;
   displayName: string | null;
+  userRole?: 'customer' | 'worker' | 'admin' | null;
   onSignOut: () => Promise<void>;
 }
 
-export function CustomerNavbar({ userEmail, displayName, onSignOut }: CustomerNavbarProps) {
+export function CustomerNavbar({ userEmail, displayName, userRole, onSignOut }: CustomerNavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const pathname = usePathname();
@@ -101,29 +102,41 @@ export function CustomerNavbar({ userEmail, displayName, onSignOut }: CustomerNa
           {/* Right Action Area */}
           <div className="hidden md:flex items-center gap-3">
             {userEmail ? (
-              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setIsProfileModalOpen(true)}
-                  className="flex items-center gap-1.5 hover:text-[#0D4A52] transition-colors cursor-pointer text-left"
-                  title="View & Edit Profile"
-                  aria-label="Open customer profile"
-                >
-                  <User className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
-                  <span className="font-semibold max-w-[130px] truncate">
-                    {displayName || userEmail}
-                  </span>
-                </button>
-                <div className="w-px h-3.5 bg-[#E5DFD2] my-auto" />
-                <button
-                  type="button"
-                  onClick={onSignOut}
-                  className="p-1 hover:text-red-600 hover:bg-red-50 rounded transition-colors text-[#576563] cursor-pointer"
-                  title="Sign Out"
-                  aria-label="Sign out"
-                >
-                  <LogOut className="w-3 h-3" />
-                </button>
+              <div className="flex items-center gap-2">
+                {userRole === 'admin' && (
+                  <Link
+                    href="/admin"
+                    className="flex items-center gap-1.5 bg-[#0D4A52] hover:bg-[#072F35] text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs"
+                    title="Open Admin Operations Console"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Admin Panel</span>
+                  </Link>
+                )}
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-[#E5DFD2] text-xs text-[#152220] shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="flex items-center gap-1.5 hover:text-[#0D4A52] transition-colors cursor-pointer text-left"
+                    title="View & Edit Profile"
+                    aria-label="Open customer profile"
+                  >
+                    <User className="w-3.5 h-3.5 text-[#217E66] shrink-0" />
+                    <span className="font-semibold max-w-[130px] truncate">
+                      {displayName || userEmail}
+                    </span>
+                  </button>
+                  <div className="w-px h-3.5 bg-[#E5DFD2] my-auto" />
+                  <button
+                    type="button"
+                    onClick={onSignOut}
+                    className="p-1 hover:text-red-600 hover:bg-red-50 rounded transition-colors text-[#576563] cursor-pointer"
+                    title="Sign Out"
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             ) : (
               <Link
@@ -152,6 +165,16 @@ export function CustomerNavbar({ userEmail, displayName, onSignOut }: CustomerNa
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-[#E5DFD2] bg-white/98 backdrop-blur-md px-4 pt-2 pb-6 space-y-3">
+          {userRole === 'admin' && (
+            <Link
+              href="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-white bg-[#0D4A52] hover:bg-[#072F35]"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Admin Panel</span>
+            </Link>
+          )}
           <Link
             href="/post-job"
             onClick={() => setMobileMenuOpen(false)}

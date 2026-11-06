@@ -44,7 +44,7 @@ describe('Sahayak Customer & Worker Role-Based Separation', () => {
   });
 
   describe('Strict Cross-Role Navigation Enforcement', () => {
-    it('redirects customer away from all worker routes to /post-job', () => {
+    it('redirects customer away from all worker routes and admin routes to /post-job', () => {
       assert.strictEqual(getDestinationForRole('customer', '/worker/dashboard'), '/post-job');
       assert.strictEqual(getDestinationForRole('customer', '/worker/jobs'), '/post-job');
       assert.strictEqual(getDestinationForRole('customer', '/worker/wallet'), '/post-job');
@@ -52,6 +52,8 @@ describe('Sahayak Customer & Worker Role-Based Separation', () => {
       assert.strictEqual(getDestinationForRole('customer', '/worker/transactions'), '/post-job');
       assert.strictEqual(getDestinationForRole('customer', '/dashboard'), '/post-job');
       assert.strictEqual(getDestinationForRole('customer', '/dashboard?role=worker'), '/post-job');
+      assert.strictEqual(getDestinationForRole('customer', '/admin'), '/post-job');
+      assert.strictEqual(getDestinationForRole('customer', '/admin/users'), '/post-job');
     });
 
     it('preserves valid customer internal navigation', () => {
@@ -61,12 +63,22 @@ describe('Sahayak Customer & Worker Role-Based Separation', () => {
       assert.strictEqual(getDestinationForRole('customer', '/booking-history'), '/booking-history');
     });
 
-    it('redirects worker away from all customer routes to /dashboard?role=worker', () => {
+    it('redirects worker away from all customer routes and admin routes to /dashboard?role=worker', () => {
       assert.strictEqual(getDestinationForRole('worker', '/post-job'), '/dashboard?role=worker');
       assert.strictEqual(getDestinationForRole('worker', '/post-job?step=1'), '/dashboard?role=worker');
       assert.strictEqual(getDestinationForRole('worker', '/bookings'), '/dashboard?role=worker');
       assert.strictEqual(getDestinationForRole('worker', '/my-jobs'), '/dashboard?role=worker');
       assert.strictEqual(getDestinationForRole('worker', '/booking-history'), '/dashboard?role=worker');
+      assert.strictEqual(getDestinationForRole('worker', '/admin'), '/dashboard?role=worker');
+      assert.strictEqual(getDestinationForRole('worker', '/admin/verification'), '/dashboard?role=worker');
+    });
+
+    it('enforces admin destination and handles suspended admin safely', () => {
+      assert.strictEqual(getDestinationForRole('admin'), '/admin');
+      assert.strictEqual(getDestinationForRole('admin', '/admin/settings'), '/admin/settings');
+      assert.strictEqual(getDestinationForRole('admin', '/post-job'), '/admin');
+      assert.strictEqual(getDestinationForRole('admin', null, { isSuspended: true }), '/login?error=account_suspended');
+      assert.strictEqual(getDestinationForRole('admin', '/admin', { isSuspended: true }), '/login?error=account_suspended');
     });
 
     it('preserves valid worker internal navigation', () => {

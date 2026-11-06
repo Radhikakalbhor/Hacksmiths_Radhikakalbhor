@@ -56,8 +56,8 @@ describe('Sahayak Authentication & Role-Based Dashboard Routing', () => {
 
     it('protects against unknown or invalid role strings', () => {
       const role = determineUserRole({
-        profileRole: 'superadmin' as any,
-        metadataRole: 'hacker' as any,
+        profileRole: 'superadmin',
+        metadataRole: 'hacker',
         fallbackRole: 'customer',
       });
       assert.equal(role, 'customer', 'Unknown roles must fall back safely to customer');
@@ -176,20 +176,93 @@ describe('Sahayak Authentication & Role-Based Dashboard Routing', () => {
     });
   });
 
-  describe('Admin Routing', () => {
-    it('routes Admin to /dashboard?role=worker&admin=true by default', () => {
+  describe('Admin Routing & Role Protection', () => {
+    it('routes Admin to /admin by default', () => {
       const dest = getDestinationForRole('admin');
-      assert.equal(dest, '/dashboard?role=worker&admin=true');
+      assert.equal(dest, '/admin');
     });
 
-    it('redirects Admin away from /post-job to authorized admin dashboard', () => {
+    it('redirects Admin away from /post-job to authorized admin console /admin', () => {
       const dest = getDestinationForRole('admin', '/post-job');
-      assert.equal(dest, '/dashboard?role=worker&admin=true');
+      assert.equal(dest, '/admin');
     });
 
-    it('allows Admin to navigate to internal management routes', () => {
-      const dest = getDestinationForRole('admin', '/admin/settings');
-      assert.equal(dest, '/admin/settings');
+    it('allows Admin to navigate to internal management routes (/admin/settings, /admin/verification)', () => {
+      const destSettings = getDestinationForRole('admin', '/admin/settings');
+      assert.equal(destSettings, '/admin/settings');
+
+      const destVerification = getDestinationForRole('admin', '/admin/verification');
+      assert.equal(destVerification, '/admin/verification');
+    });
+
+    it('blocks Customer from navigating to /admin* routes and redirects to /post-job', () => {
+      const destAdmin = getDestinationForRole('customer', '/admin');
+      assert.equal(destAdmin, '/post-job');
+
+      const destAdminUsers = getDestinationForRole('customer', '/admin/users');
+      assert.equal(destAdminUsers, '/post-job');
+    });
+
+    it('blocks Worker from navigating to /admin* routes and redirects to /dashboard?role=worker', () => {
+      const destAdmin = getDestinationForRole('worker', '/admin');
+      assert.equal(destAdmin, '/dashboard?role=worker');
+
+      const destAdminVerify = getDestinationForRole('worker', '/admin/verification');
+      assert.equal(destAdminVerify, '/dashboard?role=worker');
+    });
+
+    it('sanitizes open redirects and protocol-relative URLs for Admin to /admin', () => {
+      const destOpen = getDestinationForRole('admin', 'https://malicious.com');
+      assert.equal(destOpen, '/admin');
+
+      const destProto = getDestinationForRole('admin', '//evil.com');
+      assert.equal(destProto, '/admin');
+
+      const destSlash = getDestinationForRole('admin', '/\\evil.com');
+      assert.equal(destSlash, '/admin');
+    });
+
+    it('redirects Suspended Admin accounts to /login?error=account_suspended', () => {
+      const destDefault = getDestinationForRole('admin', null, { isSuspended: true });
+      assert.equal(destDefault, '/login?error=account_suspended');
+
+      const destAdmin = getDestinationForRole('admin', '/admin', { isSuspended: true });
+      assert.equal(destAdmin, '/login?error=account_suspended');
+
+      const destSubpath = getDestinationForRole('admin', '/admin/users', true);
+      assert.equal(destSubpath, '/login?error=account_suspended');
+    });
+
+    it('resolves active Admin OAuth login to /admin', () => {
+      const result = resolveOAuthRoleAndDestination({
+        existingProfileRole: 'admin',
+        requestedRoleParam: null,
+        redirectParam: null,
+      });
+      assert.equal(result.finalRole, 'admin');
+      assert.equal(result.roleMismatch, false);
+      assert.equal(result.destination, '/admin');
+    });
+
+    it('resolves active Admin OAuth login with safe /admin subpath redirect', () => {
+      const result = resolveOAuthRoleAndDestination({
+        existingProfileRole: 'admin',
+        requestedRoleParam: null,
+        redirectParam: '/admin/audit-log',
+      });
+      assert.equal(result.finalRole, 'admin');
+      assert.equal(result.destination, '/admin/audit-log');
+    });
+
+    it('resolves Suspended Admin OAuth login to /login?error=account_suspended', () => {
+      const result = resolveOAuthRoleAndDestination({
+        existingProfileRole: 'admin',
+        requestedRoleParam: null,
+        redirectParam: '/admin',
+        isSuspended: true,
+      });
+      assert.equal(result.finalRole, 'admin');
+      assert.equal(result.destination, '/login?error=account_suspended');
     });
   });
 

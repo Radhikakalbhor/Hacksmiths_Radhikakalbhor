@@ -163,6 +163,7 @@ function NavbarContent() {
           <WorkerNavbar
             userEmail={userEmail}
             displayName={displayName}
+            userRole={userRole}
             onSignOut={handleSignOut}
           />
         ) : (
@@ -170,6 +171,7 @@ function NavbarContent() {
           <CustomerNavbar
             userEmail={userEmail}
             displayName={displayName}
+            userRole={userRole}
             onSignOut={handleSignOut}
           />
         )}

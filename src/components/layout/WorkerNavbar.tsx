@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   X,
+  ShieldCheck,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { WorkerNotificationsDrawer } from '@/components/worker/WorkerNotificationsDrawer';
@@ -22,10 +23,11 @@ import { WorkerNotification } from '@/types/wallet';
 interface WorkerNavbarProps {
   userEmail: string | null;
   displayName: string | null;
+  userRole?: 'customer' | 'worker' | 'admin' | null;
   onSignOut: () => Promise<void>;
 }
 
-export function WorkerNavbar({ userEmail, displayName, onSignOut }: WorkerNavbarProps) {
+export function WorkerNavbar({ userEmail, displayName, userRole, onSignOut }: WorkerNavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [notifications, setNotifications] = useState<WorkerNotification[]>([]);
@@ -119,6 +121,18 @@ export function WorkerNavbar({ userEmail, displayName, onSignOut }: WorkerNavbar
 
           {/* Right Action Area: Live Wallet Balance + Notifications + Sign Out */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {userRole === 'admin' && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0D4A52] hover:bg-[#072F35] text-white text-xs font-semibold transition shadow-xs whitespace-nowrap"
+                title="Open full Admin Operations Console"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Open full Admin Panel</span>
+                <span className="sm:hidden">Admin Panel</span>
+              </Link>
+            )}
+
             {/* Quick Wallet Pill */}
             <Link
               href="/worker/wallet"
@@ -177,6 +191,16 @@ export function WorkerNavbar({ userEmail, displayName, onSignOut }: WorkerNavbar
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-b border-[#E5DFD2] bg-white/98 backdrop-blur-md px-4 pt-2 pb-6 space-y-2">
+          {userRole === 'admin' && (
+            <Link
+              href="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-lg bg-[#0D4A52] text-white hover:bg-[#072F35]"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Open full Admin Panel</span>
+            </Link>
+          )}
           <Link
             href="/worker/dashboard"
             onClick={() => setMobileMenuOpen(false)}

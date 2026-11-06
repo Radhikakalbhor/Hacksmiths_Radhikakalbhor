@@ -70,26 +70,26 @@ export async function GET(request: NextRequest) {
 
   // 2. Query existing profile to prevent role overwriting or privilege escalation
   // Includes adminClient fallback to prevent false negatives from RLS race conditions
-  let existingProfile: { id: string; role: UserRole; verification_status?: string } | null = null;
+  let existingProfile: { id: string; role: UserRole; verification_status?: string; is_suspended?: boolean } | null = null;
 
   const { data: userProfile, error: profileQueryError } = await supabase
     .from('profiles')
-    .select('id, role, verification_status')
+    .select('id, role, verification_status, is_suspended')
     .eq('id', user.id)
     .maybeSingle();
 
   if (userProfile && !profileQueryError) {
-    existingProfile = userProfile as { id: string; role: UserRole; verification_status?: string };
+    existingProfile = userProfile as { id: string; role: UserRole; verification_status?: string; is_suspended?: boolean };
   } else {
     const adminClient = getSupabaseAdminClient();
     if (adminClient) {
       const { data: adminProf } = await adminClient
         .from('profiles')
-        .select('id, role, verification_status')
+        .select('id, role, verification_status, is_suspended')
         .eq('id', user.id)
         .maybeSingle();
       if (adminProf) {
-        existingProfile = adminProf as { id: string; role: UserRole; verification_status?: string };
+        existingProfile = adminProf as { id: string; role: UserRole; verification_status?: string; is_suspended?: boolean };
       }
     }
   }
@@ -102,6 +102,7 @@ export async function GET(request: NextRequest) {
       existingProfileRole: existingProfile?.role,
       requestedRoleParam: rawRole,
       redirectParam,
+      isSuspended: existingProfile?.is_suspended,
     });
 
   // Handle explicit Account-Role Mismatch:

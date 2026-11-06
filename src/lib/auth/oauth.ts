@@ -1,5 +1,5 @@
 import { UserRole } from '@/types/database.types';
-import { getDestinationForRole } from '@/lib/auth/roles';
+import { getDestinationForRole, normalizeRole } from '@/lib/auth/roles';
 
 export interface OAuthResolutionResult {
   finalRole: UserRole;
@@ -16,33 +16,37 @@ export interface OAuthResolutionResult {
  * 1. Existing database roles are NEVER overwritten.
  * 2. New users can only be 'customer' or 'worker'.
  * 3. Redirect destinations are strictly role-bounded and open redirects prevented.
- * 4. Customers are redirected directly to /post-job; workers to /dashboard?role=worker.
- * 5. Workers must NEVER be redirected to /post-job.
+ * 4. Customers are redirected directly to /post-job; workers to /dashboard?role=worker; admins to /admin.
+ * 5. Workers and customers must NEVER be redirected to /admin*.
  * 6. Explicit Account Role Mismatch Detection: If a user explicitly requested worker login
  *    (e.g. selected "Worker / Partner" tab), but the authenticated database profile is a Customer,
  *    we flag roleMismatch: true and redirect to /login with an explanatory error, NEVER silently
  *    dumping the user onto the customer /post-job page.
+ * 7. Suspended admins are redirected to /login?error=account_suspended.
  */
 export function resolveOAuthRoleAndDestination({
   existingProfileRole,
   requestedRoleParam,
   redirectParam,
+  isSuspended,
 }: {
-  existingProfileRole: UserRole | null | undefined;
+  existingProfileRole: UserRole | string | null | undefined;
   requestedRoleParam: string | null;
   redirectParam: string | null;
+  isSuspended?: boolean;
 }): OAuthResolutionResult {
   let finalRole: UserRole;
-  const isNewUser = !existingProfileRole;
+  const normalizedExisting = normalizeRole(existingProfileRole);
+  const isNewUser = !normalizedExisting;
   let roleMismatch = false;
   let expectedRole: UserRole | undefined;
   let actualRole: UserRole | undefined;
 
-  if (existingProfileRole) {
-    finalRole = existingProfileRole;
+  if (normalizedExisting) {
+    finalRole = normalizedExisting;
 
     // Check for explicit role mismatch: User tried to sign in as Worker, but profile is Customer
-    if (requestedRoleParam === 'worker' && existingProfileRole === 'customer') {
+    if (requestedRoleParam === 'worker' && normalizedExisting === 'customer') {
       roleMismatch = true;
       expectedRole = 'worker';
       actualRole = 'customer';
@@ -63,8 +67,8 @@ export function resolveOAuthRoleAndDestination({
     };
   }
 
-  // Strictly role-bounded destination
-  const destination = getDestinationForRole(finalRole, redirectParam);
+  // Strictly role-bounded destination (respects admin, worker, customer invariants & suspended states)
+  const destination = getDestinationForRole(finalRole, redirectParam, { isSuspended });
 
   return {
     finalRole,

@@ -41,8 +41,8 @@ function LoginContent() {
   const [isRegisteringWorker, setIsRegisteringWorker] = useState(initialIsRegister);
 
   // Authoritative role-bounded destination router
-  const computeDestination = (targetRole: 'customer' | 'worker') => {
-    return getDestinationForRole(targetRole, rawRedirect);
+  const computeDestination = (targetRole: 'customer' | 'worker' | 'admin', isSuspended?: boolean) => {
+    return getDestinationForRole(targetRole, rawRedirect, { isSuspended });
   };
 
   // Input states
@@ -78,6 +78,9 @@ function LoginContent() {
       const emailDisplay = errorEmail ? ` (${errorEmail})` : '';
       return `Account Role Mismatch: This Google account${emailDisplay} is registered in Sahayak as a Customer. To access the Worker / Partner Dashboard, please sign in with your registered Partner account, or register a new partner profile.`;
     }
+    if (raw === 'account_suspended') {
+      return 'Account Suspended: Your administrator account has been suspended. Please contact platform support.';
+    }
     return decodeURIComponent(raw);
   };
 
@@ -87,23 +90,47 @@ function LoginContent() {
 
   // Active session
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<'customer' | 'worker' | 'admin' | null>(null);
 
   // Check active user session on mount
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user?.email) {
         setCurrentUserEmail(user.email);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (profile?.role) {
+          const norm = String(profile.role).toLowerCase();
+          if (norm === 'admin' || norm === 'worker' || norm === 'customer') {
+            setCurrentUserRole(norm as 'customer' | 'worker' | 'admin');
+          }
+        }
       }
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user?.email) {
         setCurrentUserEmail(session.user.email);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (profile?.role) {
+          const norm = String(profile.role).toLowerCase();
+          if (norm === 'admin' || norm === 'worker' || norm === 'customer') {
+            setCurrentUserRole(norm as 'customer' | 'worker' | 'admin');
+          }
+        }
       } else {
         setCurrentUserEmail(null);
+        setCurrentUserRole(null);
       }
     });
 
@@ -152,7 +179,7 @@ function LoginContent() {
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const targetRedirect = computeDestination(role);
+      const targetRedirect = rawRedirect || computeDestination(role);
       const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
 
       console.log(`[Google OAuth Initiation] selectedRole=${role}, targetRedirect=${targetRedirect}`);
@@ -249,7 +276,7 @@ function LoginContent() {
       }
 
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const targetRedirect = computeDestination(role);
+      const targetRedirect = rawRedirect || computeDestination(role);
       const callbackUrl = `${origin}/auth/callback?role=${role}&redirect=${encodeURIComponent(targetRedirect)}`;
 
       const { error } = await supabase.auth.signInWithOtp({
@@ -486,12 +513,36 @@ function LoginContent() {
         return;
       }
 
-      // 2. Existing Worker Sign In: verify authoritative worker role
-      if (role === 'worker' && !isRegisteringWorker) {
-        const meRes = await fetch('/api/auth/me');
-        const meData = await meRes.json();
+      // 2. Fetch authoritative user profile to verify role and status
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, role, is_suspended')
+        .eq('id', user.id)
+        .maybeSingle();
 
-        if (meData.data?.role !== 'worker') {
+      const profileRole = existingProfile?.role ? String(existingProfile.role).toLowerCase() : null;
+
+      // Explicit Admin Case: immediately route to /admin
+      if (profileRole === 'admin') {
+        if (existingProfile?.is_suspended) {
+          setErrorMsg('Your administrator account has been suspended. Please contact platform support.');
+          await supabase.auth.signOut();
+          setLoading(false);
+          return;
+        }
+
+        setSuccessMsg('Administrator authenticated successfully! Redirecting to Admin Panel...');
+        const targetDestination = computeDestination('admin');
+        setTimeout(() => {
+          router.push(targetDestination);
+          router.refresh();
+        }, 800);
+        return;
+      }
+
+      // Existing Worker Sign In: verify authoritative worker role
+      if (role === 'worker' && !isRegisteringWorker) {
+        if (profileRole !== 'worker') {
           setErrorMsg('This email is not registered as a worker. Please register as a new partner first.');
           await supabase.auth.signOut();
           setLoading(false);
@@ -499,20 +550,15 @@ function LoginContent() {
         }
 
         setSuccessMsg('Worker authenticated successfully! Redirecting to Worker Dashboard...');
+        const targetDestination = computeDestination('worker');
         setTimeout(() => {
-          router.push('/worker/dashboard');
+          router.push(targetDestination);
           router.refresh();
         }, 800);
         return;
       }
 
       // 3. Customer Sign In / Registration
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id, role')
-        .eq('id', user.id)
-        .maybeSingle();
-
       if (!existingProfile) {
         const fullNameVal =
           user.user_metadata?.full_name ||
@@ -536,7 +582,7 @@ function LoginContent() {
       }
 
       setSuccessMsg('Authentication verified successfully! Establishing session and redirecting...');
-      const targetDestination = computeDestination('customer');
+      const targetDestination = computeDestination(profileRole === 'worker' ? 'worker' : 'customer');
 
       setTimeout(() => {
         router.push(targetDestination);
@@ -611,9 +657,37 @@ function LoginContent() {
 
         if (error) {
           setErrorMsg(error.message);
-        } else if (data.session) {
+        } else if (data.session && data.user) {
+          // Fetch authoritative user profile to determine role
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role, is_suspended')
+            .eq('id', data.user.id)
+            .maybeSingle();
+
+          const profileRole = profile?.role ? String(profile.role).toLowerCase() : null;
+
+          // Explicit Admin Case: immediately route to /admin
+          if (profileRole === 'admin') {
+            if (profile?.is_suspended) {
+              setErrorMsg('Your administrator account has been suspended. Please contact platform support.');
+              await supabase.auth.signOut();
+              setLoading(false);
+              return;
+            }
+            setSuccessMsg('Signed in as Administrator. Redirecting to Admin Panel...');
+            const targetDestination = computeDestination('admin');
+            setTimeout(() => {
+              router.push(targetDestination);
+              router.refresh();
+            }, 800);
+            return;
+          }
+
           setSuccessMsg('Signed in successfully! Redirecting...');
-          const targetDestination = computeDestination(isRegisteringWorker || role === 'worker' ? 'worker' : 'customer');
+          const targetDestination = computeDestination(
+            profileRole === 'worker' || role === 'worker' ? 'worker' : 'customer'
+          );
           setTimeout(() => {
             router.push(targetDestination);
             router.refresh();
@@ -681,11 +755,11 @@ function LoginContent() {
               size="sm"
               className="w-full text-xs"
               onClick={() => {
-                const target = computeDestination(role);
+                const target = computeDestination(currentUserRole || role);
                 router.push(target);
               }}
             >
-              Continue to {role === 'worker' ? 'Dashboard' : 'Create Service Request'}
+              Continue to {currentUserRole === 'admin' ? 'Admin Panel' : role === 'worker' ? 'Dashboard' : 'Create Service Request'}
             </Button>
             <Button
               variant="secondary"
